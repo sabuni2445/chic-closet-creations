@@ -2,38 +2,47 @@ import heroBg from "@/assets/hero-bg.jpg";
 
 const HeroSection = () => {
   return (
-    <section className="relative h-[85vh] min-h-[600px] overflow-hidden">
+    <section className="relative h-[90vh] min-h-[650px] overflow-hidden">
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
         style={{ backgroundImage: `url(${heroBg})` }}
       />
-      <div className="absolute inset-0 bg-foreground/20" />
-      
-      <div className="relative z-10 container h-full flex flex-col justify-center items-start">
-        <div className="max-w-lg animate-fade-in-up">
-          <p className="font-display italic text-2xl text-cream mb-2" style={{ animationDelay: "0.2s" }}>
+      <div className="absolute inset-0 bg-gradient-to-b from-foreground/30 via-foreground/10 to-foreground/50" />
+
+      <div className="relative z-10 container h-full flex flex-col justify-end pb-20 items-start">
+        <div className="max-w-xl">
+          <p
+            className="font-display italic text-3xl md:text-4xl text-cream/90 mb-2 animate-fade-in"
+            style={{ animationDelay: "0.2s" }}
+          >
             She's a
           </p>
           <h1
-            className="font-display text-6xl md:text-8xl font-light tracking-wide text-cream mb-6 animate-fade-in-up"
+            className="font-display text-7xl md:text-[120px] font-light tracking-[0.08em] text-cream leading-[0.9] mb-6 animate-fade-in-up"
             style={{ animationDelay: "0.4s" }}
           >
             DREAM
           </h1>
-          <p
-            className="font-body text-sm tracking-[0.2em] uppercase text-cream/80 mb-8 animate-fade-in-up"
-            style={{ animationDelay: "0.6s" }}
-          >
-            New Collection 2026
-          </p>
+          <div className="flex items-center gap-4 mb-8 animate-fade-in-up" style={{ animationDelay: "0.6s" }}>
+            <span className="w-12 h-px bg-cream/50" />
+            <p className="font-body text-[11px] tracking-[0.3em] uppercase text-cream/70">
+              New Collection 2026
+            </p>
+          </div>
           <a
             href="#shop"
-            className="inline-block bg-accent text-accent-foreground font-body text-sm tracking-[0.2em] uppercase px-10 py-4 hover:bg-accent/90 transition-colors duration-300 animate-fade-in-up"
+            className="inline-block bg-primary/90 backdrop-blur-sm text-primary-foreground font-body text-[11px] tracking-[0.25em] uppercase px-10 py-4 hover:bg-primary transition-all duration-500 animate-fade-in-up"
             style={{ animationDelay: "0.8s" }}
           >
-            Shop Now
+            Explore Now
           </a>
         </div>
+      </div>
+
+      {/* Decorative scroll indicator */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-fade-in" style={{ animationDelay: "1.2s" }}>
+        <span className="font-body text-[9px] tracking-[0.3em] uppercase text-cream/40">Scroll</span>
+        <div className="w-px h-8 bg-gradient-to-b from-cream/40 to-transparent" />
       </div>
     </section>
   );
