@@ -1,25 +1,22 @@
-import { Heart, Eye } from "lucide-react";
-import dress1 from "@/assets/dress1.jpg";
-import dress2 from "@/assets/dress2.jpg";
-import dress3 from "@/assets/dress3.jpg";
-import dress4 from "@/assets/dress4.jpg";
-import dress5 from "@/assets/dress5.jpg";
-import dress6 from "@/assets/dress6.jpg";
-import dress7 from "@/assets/dress7.jpg";
-import dress8 from "@/assets/dress8.jpg";
 
-const products = [
-  { name: "Blush Evening Gown", price: 289, image: dress1, tag: "New", featured: true },
-  { name: "Ivory Satin Dress", price: 199, image: dress2 },
-  { name: "Gold Champagne Maxi", price: 349, image: dress3, tag: "Best Seller" },
-  { name: "Dusty Rose Midi", price: 179, image: dress4 },
-  { name: "Noir Velvet Gown", price: 399, image: dress5, tag: "Exclusive", featured: true },
-  { name: "Lavender Floral", price: 159, image: dress6 },
-  { name: "Emerald Silk Gown", price: 329, image: dress7 },
-  { name: "Coral Wrap Dress", price: 189, image: dress8 },
-];
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Heart, Eye } from "lucide-react";
+import { products } from "@/data/products";
+import ProductDetailModal from "./ProductDetailModal";
+import { useStore } from "@/hooks/use-store";
+import { toast } from "sonner";
 
 const ProductGrid = () => {
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const { toggleFavorite, isFavorite } = useStore();
+
+  const handleFavorite = (e: React.MouseEvent, productId: string) => {
+    e.stopPropagation();
+    toggleFavorite(productId);
+    toast.success(isFavorite(productId) ? "Removed from favorites" : "Added to favorites");
+  };
+
   return (
     <section id="shop" className="py-20 bg-background">
       <div className="container">
@@ -35,12 +32,14 @@ const ProductGrid = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 auto-rows-[280px] md:auto-rows-[320px]">
           {products.map((product, i) => {
             const isLarge = product.featured;
+            const favorited = isFavorite(product.id);
+
             return (
               <div
-                key={product.name}
-                className={`group cursor-pointer relative overflow-hidden animate-fade-in-up ${
-                  isLarge ? "row-span-2 md:row-span-2" : ""
-                }`}
+                key={product.id}
+                onClick={() => setSelectedProduct(product)}
+                className={`group cursor-pointer relative overflow-hidden animate-fade-in-up ${isLarge ? "row-span-2 md:row-span-2" : ""
+                  }`}
                 style={{ animationDelay: `${i * 0.08}s` }}
               >
                 <img
@@ -62,10 +61,16 @@ const ProductGrid = () => {
 
                 {/* Action buttons */}
                 <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-500">
-                  <button className="bg-background/80 backdrop-blur-sm text-foreground p-2 hover:bg-primary hover:text-primary-foreground transition-colors duration-300">
-                    <Heart size={14} strokeWidth={1.5} />
+                  <button
+                    onClick={(e) => handleFavorite(e, product.id)}
+                    className={`bg-background/80 backdrop-blur-sm p-2 hover:bg-primary hover:text-primary-foreground transition-colors duration-300 ${favorited ? "text-primary" : "text-foreground"}`}
+                  >
+                    <Heart size={14} strokeWidth={1.5} className={favorited ? "fill-primary" : ""} />
                   </button>
-                  <button className="bg-background/80 backdrop-blur-sm text-foreground p-2 hover:bg-primary hover:text-primary-foreground transition-colors duration-300">
+                  <button
+                    onClick={() => setSelectedProduct(product)}
+                    className="bg-background/80 backdrop-blur-sm text-foreground p-2 hover:bg-primary hover:text-primary-foreground transition-colors duration-300"
+                  >
                     <Eye size={14} strokeWidth={1.5} />
                   </button>
                 </div>
@@ -78,7 +83,7 @@ const ProductGrid = () => {
                   <div className="flex items-center justify-between mt-1">
                     <p className="font-body text-sm text-background/80">${product.price}.00</p>
                     <button className="font-body text-[10px] tracking-[0.15em] uppercase text-background/80 border-b border-background/40 hover:text-background hover:border-background transition-colors pb-0.5 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
-                      Add to bag
+                      View Details
                     </button>
                   </div>
                 </div>
@@ -87,17 +92,25 @@ const ProductGrid = () => {
           })}
         </div>
 
+
         <div className="text-center mt-14">
-          <a
-            href="#"
+          <Link
+            to="/shop"
             className="inline-block border border-foreground/30 text-foreground font-body text-[11px] tracking-[0.25em] uppercase px-12 py-4 hover:bg-foreground hover:text-background transition-all duration-500 relative group"
           >
             <span className="relative z-10">View All Pieces</span>
-          </a>
+          </Link>
         </div>
       </div>
+
+      <ProductDetailModal
+        product={selectedProduct}
+        isOpen={!!selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+      />
     </section>
   );
 };
+
 
 export default ProductGrid;

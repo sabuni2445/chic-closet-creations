@@ -1,4 +1,6 @@
+
 import heroBg from "@/assets/hero-bg.jpg";
+import { Link } from "react-router-dom";
 
 const HeroSection = () => {
   return (
@@ -29,13 +31,12 @@ const HeroSection = () => {
               New Collection 2026
             </p>
           </div>
-          <a
-            href="#shop"
+          <Link
+            to="/shop"
             className="inline-block bg-primary/90 backdrop-blur-sm text-primary-foreground font-body text-[11px] tracking-[0.25em] uppercase px-10 py-4 hover:bg-primary transition-all duration-500 animate-fade-in-up"
-            style={{ animationDelay: "0.8s" }}
           >
             Explore Now
-          </a>
+          </Link>
         </div>
       </div>
 
