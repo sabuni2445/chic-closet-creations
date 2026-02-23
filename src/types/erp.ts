@@ -130,6 +130,12 @@ export interface Employee {
     salary: number;
     status: 'active' | 'inactive';
     joined_date: string;
+    address?: string;
+    national_id?: string;
+    emergency_contact_name?: string;
+    emergency_contact_phone?: string;
+    guarantor_name?: string;
+    guarantor_phone?: string;
 }
 
 export interface JournalEntry {

@@ -3,7 +3,8 @@ import { persist } from "zustand/middleware";
 import {
     ERPProduct, ProductVariant, InventoryBatch, InventoryTransaction,
     Order, OrderItem, OrderItemBatch, Invoice, Payment,
-    JournalEntry, CostMethod, TransactionType, Employee
+    JournalEntry, CostMethod, TransactionType, Employee,
+    Category, Brand
 } from "../types/erp";
 
 interface ERPState {
@@ -18,10 +19,17 @@ interface ERPState {
     payments: Payment[];
     journalEntries: JournalEntry[];
     employees: Employee[];
+    categories: Category[];
+    brands: Brand[];
     costMethod: CostMethod;
 
     // Actions
     addProduct: (product: ERPProduct) => void;
+    addVariant: (variant: ProductVariant) => void;
+    addCategory: (category: Category) => void;
+    addBrand: (brand: Brand) => void;
+    deleteCategory: (id: string) => void;
+    deleteBrand: (id: string) => void;
     addBatch: (batch: Omit<InventoryBatch, 'id'>) => void;
     setCostMethod: (method: CostMethod) => void;
 
@@ -60,9 +68,29 @@ export const useERPStore = create<ERPState>()(
             payments: [],
             journalEntries: [],
             employees: [],
+            categories: [
+                { id: "Evening", name: "Evening" },
+                { id: "Cocktail", name: "Cocktail" },
+                { id: "Bridal", name: "Bridal" },
+                { id: "Casual", name: "Casual" },
+                { id: "Summer", name: "Summer" }
+            ],
+            brands: [
+                { id: "Rina's Boutique", name: "Rina's Boutique" }
+            ],
             costMethod: 'FIFO',
 
             addProduct: (product) => set((state) => ({ products: [...state.products, product] })),
+
+            addVariant: (variant) => set((state) => ({ variants: [...state.variants, variant] })),
+
+            addCategory: (category) => set((state) => ({ categories: [...state.categories, category] })),
+
+            addBrand: (brand) => set((state) => ({ brands: [...state.brands, brand] })),
+
+            deleteCategory: (id) => set((state) => ({ categories: state.categories.filter(c => c.id !== id) })),
+
+            deleteBrand: (id) => set((state) => ({ brands: state.brands.filter(b => b.id !== id) })),
 
             addEmployee: (employee) => set((state) => ({ employees: [...state.employees, employee] })),
 
@@ -86,11 +114,14 @@ export const useERPStore = create<ERPState>()(
                         created_at: new Date().toISOString()
                     };
 
-                    // Automatic Journal Entry for Purchase
+                    const variant = state.variants.find(v => v.id === batchData.product_variant_id);
+                    const product = state.products.find(p => p.id === variant?.product_id);
+                    const productName = product?.name || "Unknown Product";
+
                     const journalEntry: JournalEntry = {
                         id: crypto.randomUUID(),
                         date: new Date().toISOString(),
-                        description: `Purchase of stock - Batch ${id}`,
+                        description: `Purchase: ${productName} (${batchData.quantity_remaining} units)`,
                         reference_type: 'PURCHASE',
                         reference_id: id,
                         items: [
@@ -213,7 +244,7 @@ export const useERPStore = create<ERPState>()(
                 const journalEntry: JournalEntry = {
                     id: crypto.randomUUID(),
                     date: timestamp,
-                    description: `Sale Order ${orderId}`,
+                    description: `Sale: ${customerId} (${newOrderItems.length} items)`,
                     reference_type: 'SALE',
                     reference_id: orderId,
                     items: [
@@ -260,10 +291,13 @@ export const useERPStore = create<ERPState>()(
                         payment_date: new Date().toISOString()
                     };
 
+                    const order = state.orders.find(o => o.id === invoice.order_id);
+                    const customerName = order?.customer_id || "Customer";
+
                     const journalEntry: JournalEntry = {
                         id: crypto.randomUUID(),
                         date: new Date().toISOString(),
-                        description: `Payment for Invoice ${invoiceId}`,
+                        description: `Payment: ${customerName}`,
                         reference_type: 'PAYMENT',
                         reference_id: payment.id,
                         items: [
