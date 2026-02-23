@@ -254,7 +254,7 @@ const Admin = () => {
             <aside className="w-64 bg-[#1A1C1E] text-white flex flex-col shadow-2xl z-50">
                 <div className="p-8 flex flex-col items-center">
                     <img src={logo} className="h-16 w-16 rounded-full mb-4 border-2 border-primary/20 p-1 mix-blend-screen" />
-                    <h2 className="text-sm font-display tracking-[0.3em] uppercase text-primary font-bold">Rina's Atelier</h2>
+                    <h2 className="text-sm font-display tracking-[0.3em] uppercase text-primary font-bold">Rina's Closet</h2>
                     <span className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Management Suite</span>
                 </div>
 
@@ -1201,7 +1201,7 @@ const Admin = () => {
                                 <div className="h-20 w-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mb-8 mx-auto rotate-3">
                                     <Settings size={40} className="animate-spin-slow" />
                                 </div>
-                                <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">System Atelier</h2>
+                                <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">Closet Core</h2>
                                 <p className="text-sm text-gray-500 mt-4 leading-relaxed font-medium">Your boutique ERP core is fully operational and syncing in real-time. System settings and workstation configurations are restricted during active fiscal periods.</p>
                                 <div className="mt-10 grid grid-cols-2 gap-4">
                                     <div className="p-4 rounded-3xl bg-gray-50 border border-gray-100">
