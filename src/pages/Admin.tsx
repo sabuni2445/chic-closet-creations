@@ -254,7 +254,7 @@ const Admin = () => {
             <aside className="w-64 bg-[#1A1C1E] text-white flex flex-col shadow-2xl z-50">
                 <div className="p-8 flex flex-col items-center">
                     <img src={logo} className="h-16 w-16 rounded-full mb-4 border-2 border-primary/20 p-1 mix-blend-screen" />
-                    <h2 className="text-sm font-display tracking-[0.3em] uppercase text-primary font-bold">Rina's Closet</h2>
+                    <h2 className="text-sm font-display tracking-[0.3em] uppercase text-primary font-bold">Rinas Closet</h2>
                     <span className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Management Suite</span>
                 </div>
 
