@@ -1,4 +1,4 @@
-
+import { useState } from "react";
 import {
     Dialog,
     DialogContent,
@@ -9,9 +9,12 @@ import {
 import { Product } from "@/data/products";
 import ThreeDViewer from "./ThreeDViewer";
 import { Button } from "@/components/ui/button";
-import { Heart, CalendarCheck, Share2 } from "lucide-react";
+import { Heart, CalendarCheck, Share2, Lock, UserCheck } from "lucide-react";
 import { useStore } from "@/hooks/use-store";
+import { useERPStore } from "@/hooks/use-erp-store";
+import { useAuthStore } from "@/hooks/use-auth-store";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface ProductDetailModalProps {
     product: Product | null;
@@ -21,6 +24,9 @@ interface ProductDetailModalProps {
 
 const ProductDetailModal = ({ product, isOpen, onClose }: ProductDetailModalProps) => {
     const { toggleFavorite, isFavorite, reserveProduct, isReserved } = useStore();
+    const erp = useERPStore();
+    const { currentUser } = useAuthStore();
+    const navigate = useNavigate();
 
     if (!product) return null;
 
@@ -33,8 +39,36 @@ const ProductDetailModal = ({ product, isOpen, onClose }: ProductDetailModalProp
     };
 
     const handleReserve = () => {
-        reserveProduct(product.id);
-        toast.success("Product reserved successfully!");
+        // Must be logged in
+        if (!currentUser) {
+            toast.error("Please sign in to reserve a fitting.", {
+                action: {
+                    label: "Sign In",
+                    onClick: () => { onClose(); navigate("/auth"); }
+                }
+            });
+            return;
+        }
+
+        // Try to find a variant ID — use product.id as fallback
+        const variant = erp.variants.find(v => v.product_id === product.id);
+        const variantId = variant?.id ?? product.id;
+
+        try {
+            erp.requestReservation({
+                customer_name: currentUser.name,
+                customer_phone: currentUser.phone,
+                product_variant_id: variantId,
+                notes: `Requested: ${product.name}`
+            });
+
+            reserveProduct(product.id);
+            toast.success("Fitting reserved! We'll be in touch shortly.", {
+                description: `Confirmation sent for ${product.name}.`
+            });
+        } catch (err: any) {
+            toast.error(err?.message || "Could not reserve — item may be out of stock.");
+        }
     };
 
     return (
@@ -73,13 +107,27 @@ const ProductDetailModal = ({ product, isOpen, onClose }: ProductDetailModalProp
 
                         <div className="space-y-4 pt-4">
                             <div className="flex flex-col gap-3">
+
+                                {/* Logged-in user badge */}
+                                {currentUser && (
+                                    <div className="flex items-center gap-2 text-[10px] text-emerald-600 font-bold uppercase tracking-widest bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-100">
+                                        <UserCheck size={13} />
+                                        Booking as <span className="font-black">{currentUser.name}</span>
+                                    </div>
+                                )}
+
                                 <Button
                                     onClick={handleReserve}
                                     disabled={reserved}
                                     className="w-full h-14 bg-primary text-primary-foreground hover:bg-primary/90 rounded-none tracking-[0.2em] text-xs uppercase"
                                 >
-                                    <CalendarCheck className="mr-2 h-4 w-4" />
-                                    {reserved ? "ALREADY RESERVED" : "RESERVE FOR FITTING"}
+                                    {reserved ? (
+                                        <><CalendarCheck className="mr-2 h-4 w-4" /> ALREADY RESERVED</>
+                                    ) : currentUser ? (
+                                        <><CalendarCheck className="mr-2 h-4 w-4" /> RESERVE FOR FITTING</>
+                                    ) : (
+                                        <><Lock className="mr-2 h-4 w-4" /> SIGN IN TO RESERVE</>
+                                    )}
                                 </Button>
 
                                 <div className="flex gap-2">

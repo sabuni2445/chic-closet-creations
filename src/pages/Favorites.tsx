@@ -8,9 +8,25 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 
+import { useERPStore } from "@/hooks/use-erp-store";
+import { useMemo } from "react";
+
 const Favorites = () => {
     const { favorites, toggleFavorite, reserveProduct } = useStore();
-    const favoriteProducts = products.filter((p) => favorites.includes(p.id));
+    const erp = useERPStore();
+
+    const collection = useMemo(() => {
+        const erpMapped = erp.products.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.selling_price,
+            image: p.images?.[0] || "/placeholder.svg",
+            category: p.category_id,
+        }));
+        return [...products, ...erpMapped];
+    }, [erp.products]);
+
+    const favoriteProducts = collection.filter((p) => favorites.includes(p.id));
 
     const handleReserve = (productId: string) => {
         reserveProduct(productId);

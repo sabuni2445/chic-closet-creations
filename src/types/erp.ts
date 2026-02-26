@@ -41,6 +41,7 @@ export interface InventoryBatch {
     id: string;
     product_variant_id: string;
     quantity_remaining: number;
+    quantity_reserved?: number;
     unit_cost: number;
     purchase_date: string;
 }
@@ -121,10 +122,13 @@ export interface Refund {
     created_at: string;
 }
 
+export type EmployeeDepartment = 'sales' | 'warehouse' | 'management';
+
 export interface Employee {
     id: string;
     name: string;
     role: string;
+    department: EmployeeDepartment;
     email: string;
     phone: string;
     salary: number;
@@ -151,4 +155,29 @@ export interface JournalEntryItem {
     account_name: string;
     debit: number;
     credit: number;
+}
+export type ReservationStatus = 'pending' | 'confirmed_prepaid' | 'confirmed_paid_fully' | 'confirmed_no_prepayment' | 'completed' | 'cancelled' | 'expired';
+
+export interface Reservation {
+    id: string;
+    customer_name: string;
+    customer_phone: string;
+    product_variant_id: string;
+    status: ReservationStatus;
+    created_at: string;
+    assigned_employee_id?: string;
+    prepayment_amount?: number;
+    notes?: string;
+    reserved_batches?: { batch_id: string, quantity: number }[];
+}
+
+export interface EmployeeTask {
+    id: string;
+    employee_id: string;
+    title: string;
+    description: string;
+    status: 'todo' | 'in_progress' | 'done';
+    priority: 'low' | 'medium' | 'high';
+    due_date?: string;
+    created_at: string;
 }

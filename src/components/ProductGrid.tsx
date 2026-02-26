@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Heart, Eye } from "lucide-react";
 import { products } from "@/data/products";
@@ -7,9 +6,30 @@ import ProductDetailModal from "./ProductDetailModal";
 import { useStore } from "@/hooks/use-store";
 import { toast } from "sonner";
 
+import { useERPStore } from "@/hooks/use-erp-store";
+
 const ProductGrid = () => {
+  const erp = useERPStore();
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const { toggleFavorite, isFavorite } = useStore();
+
+  const collection = useMemo(() => {
+    const erpMapped = erp.products.map(p => ({
+      id: p.id,
+      name: p.name,
+      price: p.selling_price,
+      image: p.images?.[0] || "/placeholder.svg",
+      images: p.images || ["/placeholder.svg"],
+      category: p.category_id,
+      description: p.description,
+      featured: false,
+      tag: "New Arrival",
+      sizes: p.sizes,
+      colors: p.colors
+    }));
+    // Show all products
+    return [...products, ...erpMapped];
+  }, [erp.products]);
 
   const handleFavorite = (e: React.MouseEvent, productId: string) => {
     e.stopPropagation();
@@ -30,8 +50,8 @@ const ProductGrid = () => {
 
         {/* Creative masonry-style grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 auto-rows-[280px] md:auto-rows-[320px]">
-          {products.map((product, i) => {
-            const isLarge = product.featured;
+          {collection.map((product, i) => {
+            const isLarge = (product as any).featured;
             const favorited = isFavorite(product.id);
 
             return (
@@ -53,9 +73,9 @@ const ProductGrid = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-foreground/70 via-foreground/10 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
 
                 {/* Tag */}
-                {product.tag && (
+                {(product as any).tag && (
                   <span className="absolute top-3 left-3 bg-primary/90 backdrop-blur-sm text-primary-foreground font-body text-[9px] tracking-[0.2em] uppercase px-3 py-1.5">
-                    {product.tag}
+                    {(product as any).tag}
                   </span>
                 )}
 

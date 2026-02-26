@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import logo from "@/assets/logo.png";
 import { useStore } from "@/hooks/use-store";
+import { useAuthStore } from "@/hooks/use-auth-store";
 
 
 const navLinks = [
@@ -17,6 +18,7 @@ const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const { favorites, reservations } = useStore();
+  const { currentUser } = useAuthStore();
 
   return (
     <>
@@ -100,9 +102,19 @@ const Header = () => {
                   </span>
                 )}
               </Link>
-              <button aria-label="Account" className="hidden sm:block text-foreground/70 hover:text-primary transition-colors p-1.5">
-                <User size={18} strokeWidth={1.5} />
-              </button>
+              <Link
+                to={currentUser ? "/account" : "/auth"}
+                aria-label="Account"
+                className="hidden sm:flex items-center justify-center text-foreground/70 hover:text-primary transition-colors p-1.5"
+              >
+                {currentUser ? (
+                  <div className="h-7 w-7 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/20">
+                    {currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                  </div>
+                ) : (
+                  <User size={18} strokeWidth={1.5} />
+                )}
+              </Link>
             </div>
           </div>
         </div>

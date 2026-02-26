@@ -8,7 +8,7 @@ import {
     ArrowDownCircle, ArrowUpCircle, Users,
     Settings, LogOut, Package, Image as ImageIcon,
     CheckCircle2, XCircle, Mail, Phone, Briefcase,
-    ChevronRight, Search, Bell, Layers, Tag
+    ChevronRight, Search, Bell, Layers, Tag, Trash2, Edit2, Lock, FileText, Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { products as initialProducts } from "@/data/products";
 import logo from "@/assets/logo.png";
@@ -74,6 +75,7 @@ const Admin = () => {
                 id: "1",
                 name: "Sebrina K.",
                 role: "Founder & Creative Director",
+                department: "management",
                 email: "sebrina@rinascloset.com",
                 phone: "+251 911 223 344",
                 salary: 5000,
@@ -84,6 +86,7 @@ const Admin = () => {
                 id: "2",
                 name: "Hanna T.",
                 role: "Store Manager",
+                department: "sales",
                 email: "hanna@rinascloset.com",
                 phone: "+251 922 334 455",
                 salary: 2500,
@@ -93,12 +96,17 @@ const Admin = () => {
         }
     }, []);
 
-    const totalRevenue = erp.getTotalRevenue();
+    const accrualRevenue = erp.getTotalRevenue();
+    const cashRevenue = erp.getCashReceived();
     const totalCOGS = erp.getTotalCOGS();
     const inventoryValue = erp.getInventoryValue();
-    const netProfit = totalRevenue - totalCOGS;
+    const netProfit = accrualRevenue - totalCOGS;
 
     const handleAddStock = (e: React.FormEvent<HTMLFormElement>) => {
+        if (erp.isPeriodLocked) {
+            toast.error("Fiscal Period is Locked. Adjustments restricted.");
+            return;
+        }
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
         erp.addBatch({
@@ -112,14 +120,17 @@ const Admin = () => {
     };
 
     const handleMockSale = () => {
+        if (erp.isPeriodLocked) {
+            toast.error("Fiscal Period is Locked. Sales suspended.");
+            return;
+        }
         if (erp.variants.length === 0) {
             toast.error("No product variants available to sell");
             return;
         }
-
         // Pick a random variant that has stock if possible
         const variantsWithStock = erp.variants.filter(v =>
-            erp.batches.filter(b => b.product_variant_id === v.id).reduce((s, b) => s + b.quantity_remaining, 0) > 0
+            erp.batches.filter(b => b.product_variant_id === v.id).reduce((s, b) => s + (b.quantity_remaining - (b.quantity_reserved || 0)), 0) > 0
         );
 
         const sourceList = variantsWithStock.length > 0 ? variantsWithStock : erp.variants;
@@ -142,7 +153,27 @@ const Admin = () => {
         }
     };
 
+    const handleAssignTask = (e: React.FormEvent<HTMLFormElement>, employeeId: string) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        erp.addTask({
+            employee_id: employeeId,
+            title: fd.get("title") as string,
+            description: fd.get("description") as string,
+            priority: fd.get("priority") as any,
+            status: "todo",
+            due_date: fd.get("due_date") as string
+        });
+        toast.success("Task assigned successfully to staff");
+        (e.target as HTMLFormElement).reset();
+    };
+
     const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
+        if (erp.isPeriodLocked) {
+            toast.error("Fiscal Period is Locked. Catalog changes restricted.");
+            e.preventDefault();
+            return;
+        }
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
 
@@ -213,6 +244,7 @@ const Admin = () => {
             id: crypto.randomUUID(),
             name: (formData.get("name") as string) || "New Staff",
             role: (formData.get("role") as string) || "Staff",
+            department: ((formData.get("department") as string) || "sales") as any,
             email: (formData.get("email") as string) || "",
             phone: (formData.get("phone") as string) || "",
             salary: Number(formData.get("salary")) || 0,
@@ -232,13 +264,17 @@ const Admin = () => {
 
     const menuItems = [
         { id: "overview", label: "Dashboard", icon: BarChart3 },
-        { id: "products", label: "Product Catalog", icon: Tag },
-        { id: "categories", label: "Categories & Brands", icon: Layers },
+        { id: "products", label: "Catalog", icon: Tag },
+        { id: "categories", label: "Taxonomy", icon: Layers },
         { id: "inventory", label: "Inventory", icon: Package },
-        { id: "sales", label: "Sales & Orders", icon: ShoppingCart },
-        { id: "employees", label: "Employees", icon: Users },
+        { id: "sales", label: "Orders", icon: ShoppingCart },
+        { id: "reservations", label: "Reservations", icon: Calendar },
+        { id: "tasks", label: "Operations", icon: Briefcase },
+        { id: "employees", label: "Staff", icon: Users },
         { id: "accounting", label: "Financials", icon: Receipt },
+        { id: "audit", label: "Audit Logs", icon: FileText },
         { id: "workstation", label: "Staff Workspace", icon: Briefcase },
+        { id: "settings", label: "Settings", icon: Settings },
     ];
 
     const cleanDesc = (desc: string) => {
@@ -332,7 +368,7 @@ const Admin = () => {
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                 {[
                                     { label: "Inventory Value", value: inventoryValue, icon: Box, color: "text-blue-600", bg: "bg-blue-50" },
-                                    { label: "Total Revenue", value: totalRevenue, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50" },
+                                    { label: "Total Revenue", value: accrualRevenue, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50" },
                                     { label: "Cost (COGS)", value: totalCOGS, icon: ArrowDownCircle, color: "text-rose-600", bg: "bg-rose-50" },
                                     { label: "Net Profit", value: netProfit, icon: Wallet, color: "text-primary", bg: "bg-primary/5" },
                                 ].map((stat, i) => (
@@ -414,11 +450,11 @@ const Admin = () => {
                                         <CardContent className="space-y-4">
                                             {erp.products.filter(p => {
                                                 const pVars = erp.variants.filter(v => v.product_id === p.id);
-                                                const totalStock = erp.batches.filter(b => pVars.some(v => v.id === b.product_variant_id)).reduce((s, b) => s + b.quantity_remaining, 0);
+                                                const totalStock = erp.batches.filter(b => pVars.some(v => v.id === b.product_variant_id)).reduce((s, b) => s + (b.quantity_remaining - (b.quantity_reserved || 0)), 0);
                                                 return totalStock < 10 && totalStock > 0;
                                             }).slice(0, 3).map(p => {
                                                 const pVars = erp.variants.filter(v => v.product_id === p.id);
-                                                const totalStock = erp.batches.filter(b => pVars.some(v => v.id === b.product_variant_id)).reduce((s, b) => s + b.quantity_remaining, 0);
+                                                const totalStock = erp.batches.filter(b => pVars.some(v => v.id === b.product_variant_id)).reduce((s, b) => s + (b.quantity_remaining - (b.quantity_reserved || 0)), 0);
                                                 return (
                                                     <div key={p.id} className="flex items-center gap-4 p-4 rounded-xl bg-rose-50 border border-rose-100/50">
                                                         <div className="p-2 bg-rose-200/50 text-rose-600 rounded-lg"><Package size={16} /></div>
@@ -537,7 +573,22 @@ const Admin = () => {
                                         <CardContent className="p-6">
                                             <div className="flex justify-between items-start mb-2">
                                                 <h3 className="font-bold text-gray-800 text-lg leading-tight">{product.name}</h3>
-                                                <p className="text-primary font-bold text-xl">${product.selling_price}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-primary font-bold text-xl">${product.selling_price}</p>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0 text-gray-300 hover:text-rose-500 hover:bg-rose-50"
+                                                        onClick={() => {
+                                                            if (confirm(`Are you sure you want to delete ${product.name}?`)) {
+                                                                erp.deleteProduct(product.id);
+                                                                toast.success("Product removed from catalog");
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </Button>
+                                                </div>
                                             </div>
                                             <p className="text-gray-500 text-xs line-clamp-2 mb-4 leading-relaxed">{product.description}</p>
 
@@ -577,44 +628,108 @@ const Admin = () => {
                                     <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
                                     <p className="text-gray-500 text-sm mt-1">Track stock batches, unit costs, and warehouse movements.</p>
                                 </div>
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <Button className="rounded-lg bg-primary text-white shadow-lg shadow-primary/20">
-                                            <Plus size={18} className="mr-2" /> Purchase New Batch
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="rounded-2xl border-none shadow-2xl">
-                                        <DialogHeader>
-                                            <DialogTitle className="text-xl font-bold">New Inventory Inbound</DialogTitle>
-                                        </DialogHeader>
-                                        <form onSubmit={handleAddStock} className="space-y-6 pt-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] uppercase font-bold text-gray-400 px-1">Select Variant (Size/Color)</Label>
-                                                <select name="variantId" className="w-full h-12 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer">
-                                                    {erp.variants.map(v => {
-                                                        const p = erp.products.find(prod => prod.id === v.product_id);
-                                                        return (
-                                                            <option key={v.id} value={v.id}>
-                                                                {p?.name} - {v.size} / {v.color} ({v.sku})
-                                                            </option>
-                                                        );
-                                                    })}
-                                                </select>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex items-center gap-3">
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button variant="outline" className="rounded-lg border-amber-200 text-amber-600 hover:bg-amber-50">
+                                                <Edit2 size={16} className="mr-2" /> Stock Adjustment
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="rounded-2xl border-none shadow-2xl max-w-md">
+                                            <DialogHeader>
+                                                <DialogTitle className="text-xl font-bold">Stock Adjustment</DialogTitle>
+                                                <DialogDescription className="text-sm text-gray-400">Record damage, loss, correction, or return for a batch.</DialogDescription>
+                                            </DialogHeader>
+                                            <form onSubmit={(e) => {
+                                                e.preventDefault();
+                                                const fd = new FormData(e.currentTarget);
+                                                const batchId = fd.get("batchId") as string;
+                                                const type = fd.get("type") as any;
+                                                const qty = Number(fd.get("quantity"));
+                                                const reason = fd.get("reason") as string;
+                                                if (!batchId || !qty || !reason.trim()) { toast.error("All fields are required."); return; }
+                                                try {
+                                                    erp.adjustStock({ batchId, type, quantity: qty, reason });
+                                                    toast.success(`Stock ${type} recorded — ${qty} units adjusted.`);
+                                                    (e.target as HTMLFormElement).reset();
+                                                } catch (err: any) { toast.error(err.message); }
+                                            }} className="space-y-5 pt-4">
                                                 <div className="space-y-2">
-                                                    <Label className="text-[10px] uppercase font-bold text-gray-400 px-1">Total Quantity</Label>
-                                                    <Input name="quantity" type="number" required placeholder="0" className="h-12 rounded-xl border-gray-100 bg-gray-50 px-4 focus:ring-2 focus:ring-primary/20 transition-all" />
+                                                    <Label className="text-[10px] uppercase font-bold text-gray-400">Adjustment Type</Label>
+                                                    <select name="type" className="w-full h-11 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
+                                                        <option value="damage">🔴 Damage — items physically damaged</option>
+                                                        <option value="loss">🟠 Loss / Shrinkage — theft or missing stock</option>
+                                                        <option value="correction">🔵 Correction — fix a data entry error</option>
+                                                        <option value="return">🟢 Return — supplier or customer return</option>
+                                                    </select>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label className="text-[10px] uppercase font-bold text-gray-400 px-1">Unit Cost ($)</Label>
-                                                    <Input name="cost" type="number" step="0.01" required placeholder="0.00" className="h-12 rounded-xl border-gray-100 bg-gray-50 px-4 focus:ring-2 focus:ring-primary/20 transition-all" />
+                                                    <Label className="text-[10px] uppercase font-bold text-gray-400">Select Batch</Label>
+                                                    <select name="batchId" className="w-full h-11 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
+                                                        {erp.batches.filter(b => b.quantity_remaining > 0).map(b => {
+                                                            const v = erp.variants.find(v => v.id === b.product_variant_id);
+                                                            const p = erp.products.find(p => p.id === v?.product_id);
+                                                            return <option key={b.id} value={b.id}>{p?.name} – {v?.size}/{v?.color} (Qty: {b.quantity_remaining})</option>;
+                                                        })}
+                                                    </select>
                                                 </div>
-                                            </div>
-                                            <Button type="submit" className="w-full h-12 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/20">Record Inbound Batch</Button>
-                                        </form>
-                                    </DialogContent>
-                                </Dialog>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-[10px] uppercase font-bold text-gray-400">Quantity (units)</Label>
+                                                        <Input name="quantity" type="number" min="1" required placeholder="0" className="h-11 rounded-xl border-gray-100 bg-gray-50" />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-[10px] uppercase font-bold text-gray-400">Date</Label>
+                                                        <Input name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} className="h-11 rounded-xl border-gray-100 bg-gray-50" />
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-[10px] uppercase font-bold text-gray-400">Reason / Notes</Label>
+                                                    <Textarea name="reason" required placeholder="e.g. Item torn during steaming" className="rounded-xl border-gray-100 bg-gray-50 min-h-[80px]" />
+                                                </div>
+                                                <Button type="submit" className="w-full h-12 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-lg">Record Adjustment</Button>
+                                            </form>
+                                        </DialogContent>
+                                    </Dialog>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button className="rounded-lg bg-primary text-white shadow-lg shadow-primary/20">
+                                                <Plus size={18} className="mr-2" /> Purchase New Batch
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="rounded-2xl border-none shadow-2xl">
+                                            <DialogHeader>
+                                                <DialogTitle className="text-xl font-bold">New Inventory Inbound</DialogTitle>
+                                            </DialogHeader>
+                                            <form onSubmit={handleAddStock} className="space-y-6 pt-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-[10px] uppercase font-bold text-gray-400 px-1">Select Variant (Size/Color)</Label>
+                                                    <select name="variantId" className="w-full h-12 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer">
+                                                        {erp.variants.map(v => {
+                                                            const p = erp.products.find(prod => prod.id === v.product_id);
+                                                            return (
+                                                                <option key={v.id} value={v.id}>
+                                                                    {p?.name} - {v.size} / {v.color} ({v.sku})
+                                                                </option>
+                                                            );
+                                                        })}
+                                                    </select>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-[10px] uppercase font-bold text-gray-400 px-1">Total Quantity</Label>
+                                                        <Input name="quantity" type="number" required placeholder="0" className="h-12 rounded-xl border-gray-100 bg-gray-50 px-4 focus:ring-2 focus:ring-primary/20 transition-all" />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-[10px] uppercase font-bold text-gray-400 px-1">Unit Cost ($)</Label>
+                                                        <Input name="cost" type="number" step="0.01" required placeholder="0.00" className="h-12 rounded-xl border-gray-100 bg-gray-50 px-4 focus:ring-2 focus:ring-primary/20 transition-all" />
+                                                    </div>
+                                                </div>
+                                                <Button type="submit" className="w-full h-12 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/20">Record Inbound Batch</Button>
+                                            </form>
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -640,8 +755,11 @@ const Admin = () => {
                                             <TableHead className="text-[10px] uppercase text-gray-400">Product</TableHead>
                                             <TableHead className="text-[10px] uppercase text-gray-400">Purchased</TableHead>
                                             <TableHead className="text-[10px] uppercase text-gray-400 px-6">Cost</TableHead>
-                                            <TableHead className="text-[10px] uppercase text-gray-400 text-center">Remaining</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 text-center">Physical</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 text-center">Reserved</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 text-center">Available</TableHead>
                                             <TableHead className="text-[10px] uppercase text-gray-400 text-right">Valuation</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -658,23 +776,107 @@ const Admin = () => {
                                                     <TableCell className="text-xs text-gray-500">{new Date(b.purchase_date).toLocaleDateString()}</TableCell>
                                                     <TableCell className="text-xs font-semibold text-gray-600 px-6">${b.unit_cost.toFixed(2)}</TableCell>
                                                     <TableCell className="text-center">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <div className={`h-1.5 w-1.5 rounded-full ${b.quantity_remaining > 5 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                                            <span className="font-bold text-gray-900 text-sm">{b.quantity_remaining}</span>
-                                                        </div>
+                                                        <span className={`text-sm font-bold ${b.quantity_remaining > 5 ? 'text-emerald-600' : 'text-rose-500'}`}>{b.quantity_remaining}</span>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <span className={`text-sm font-bold ${(b.quantity_reserved || 0) > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{b.quantity_reserved || 0}</span>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <span className={`text-sm font-black px-2.5 py-1 rounded-lg ${(b.quantity_remaining - (b.quantity_reserved || 0)) <= 0 ? 'bg-rose-50 text-rose-500' : (b.quantity_remaining - (b.quantity_reserved || 0)) < 5 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                            {b.quantity_remaining - (b.quantity_reserved || 0)}
+                                                        </span>
                                                     </TableCell>
                                                     <TableCell className="text-right font-bold text-gray-900 text-sm">
                                                         ${(b.quantity_remaining * b.unit_cost).toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {(b as any).status === 'void' ? (
+                                                            <span className="text-[10px] font-bold text-rose-500 uppercase px-2 py-1 bg-rose-50 rounded">Voided</span>
+                                                        ) : (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-8 w-8 p-0 text-gray-300 hover:text-rose-500 hover:bg-rose-50"
+                                                                onClick={() => {
+                                                                    const reason = prompt("Reason for voiding this inventory record?");
+                                                                    if (reason) {
+                                                                        erp.voidBatch(b.id, reason);
+                                                                        toast.success("Batch successfully voided");
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <XCircle size={14} />
+                                                            </Button>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             );
                                         })}
                                         {erp.batches.length === 0 && (
-                                            <TableRow><TableCell colSpan={6} className="text-center py-10 text-gray-400">No inventory batches recorded</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={9} className="text-center py-10 text-gray-400">No inventory batches recorded</TableCell></TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
                             </Card>
+
+                            {/* ── Stock Movement History ── */}
+                            {erp.transactions.length > 0 && (
+                                <div>
+                                    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                        <History size={18} className="text-gray-400" /> Stock Movement History
+                                        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full ml-2">{erp.transactions.length} records</span>
+                                    </h2>
+                                    <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-white px-6 py-2">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="border-gray-50">
+                                                    <TableHead className="text-[10px] uppercase text-gray-400">Date</TableHead>
+                                                    <TableHead className="text-[10px] uppercase text-gray-400">Product / Batch</TableHead>
+                                                    <TableHead className="text-[10px] uppercase text-gray-400">Type</TableHead>
+                                                    <TableHead className="text-[10px] uppercase text-gray-400">Reference</TableHead>
+                                                    <TableHead className="text-[10px] uppercase text-gray-400 text-right">Qty Change</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {erp.transactions.slice().reverse().slice(0, 60).map(txn => {
+                                                    const variant = erp.variants.find(v => v.id === txn.product_variant_id);
+                                                    const product = erp.products.find(p => p.id === variant?.product_id);
+                                                    const refType = txn.reference_type || txn.type;
+                                                    const typeColors: Record<string, string> = {
+                                                        IN: "bg-emerald-50 text-emerald-600",
+                                                        OUT: "bg-rose-50 text-rose-500",
+                                                        SALE: "bg-rose-50 text-rose-500",
+                                                        DAMAGE: "bg-orange-50 text-orange-500",
+                                                        LOSS: "bg-amber-50 text-amber-600",
+                                                        CORRECTION: "bg-blue-50 text-blue-600",
+                                                        RETURN: "bg-teal-50 text-teal-600",
+                                                    };
+                                                    return (
+                                                        <TableRow key={txn.id} className="border-gray-50 h-14">
+                                                            <TableCell className="text-xs text-gray-500">
+                                                                {new Date(txn.created_at).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <p className="font-bold text-sm text-gray-800">{product?.name || "Unknown"}</p>
+                                                                <p className="text-[10px] text-gray-400 font-mono">#{txn.batch_id?.slice(0, 8)}</p>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg ${typeColors[refType] || "bg-gray-100 text-gray-500"}`}>
+                                                                    {refType}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-xs text-gray-400 font-mono">#{txn.reference_id?.slice(0, 8)}</TableCell>
+                                                            <TableCell className={`text-right font-black text-sm ${txn.type === 'IN' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                                {txn.type === 'IN' ? '+' : '−'}{txn.quantity}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </Card>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -695,7 +897,7 @@ const Admin = () => {
                                         <div className="h-8 w-px bg-gray-100" />
                                         <div className="text-right">
                                             <p className="text-[9px] uppercase font-bold text-gray-400">Cash In</p>
-                                            <p className="text-lg font-bold text-emerald-600">${totalRevenue.toLocaleString()}</p>
+                                            <p className="text-lg font-bold text-emerald-600">${cashRevenue.toLocaleString()}</p>
                                         </div>
                                     </Card>
                                 </div>
@@ -820,6 +1022,114 @@ const Admin = () => {
                         </div>
                     )}
 
+                    {/* RESERVATIONS VIEW */}
+                    {activeView === "reservations" && (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-900">Guest Reservations</h1>
+                                    <p className="text-gray-500 text-sm mt-1">Review fitting requests and assign to boutique staff.</p>
+                                </div>
+                            </div>
+
+                            <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-white px-6 py-2">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="border-gray-50 border-none">
+                                            <TableHead className="text-[10px] uppercase text-gray-400">Client</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400">Fitting Choice</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400">Status</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 text-right">Prepayment</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {erp.reservations.slice().reverse().map((res) => {
+                                            const variant = erp.variants.find(v => v.id === res.product_variant_id);
+                                            const product = erp.products.find(p => p.id === variant?.product_id);
+                                            return (
+                                                <TableRow key={res.id} className="border-gray-50 h-20">
+                                                    <TableCell>
+                                                        <p className="font-bold text-gray-800">{res.customer_name}</p>
+                                                        <p className="text-[10px] text-gray-500">{res.customer_phone}</p>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <p className="text-sm font-medium">{product?.name || "Unknown Product"}</p>
+                                                        <p className="text-[10px] text-gray-400">{res.notes}</p>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge className={`uppercase text-[9px] font-bold border-none px-2.5 py-1 ${res.status === 'pending' ? 'bg-amber-50 text-amber-600' :
+                                                            res.status === 'confirmed_prepaid' ? 'bg-emerald-50 text-emerald-600' :
+                                                                res.status === 'confirmed_no_prepayment' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
+                                                            }`}>
+                                                            {res.status.replace('_', ' ')}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono text-xs font-bold text-gray-700">
+                                                        {res.prepayment_amount ? `$${res.prepayment_amount.toFixed(2)}` : '—'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-emerald-50 hover:text-emerald-500" onClick={() => erp.updateReservationStatus(res.id, 'confirmed_no_prepayment')}><CheckCircle2 size={14} /></Button>
+                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-rose-50 hover:text-rose-500" onClick={() => erp.updateReservationStatus(res.id, 'cancelled')}><XCircle size={14} /></Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                        {erp.reservations.length === 0 && (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-20 text-gray-400 italic">No fitting reservations found</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </Card>
+                        </div>
+                    )}
+
+                    {/* OPERATIONS VIEW (TASKS) */}
+                    {activeView === "tasks" && (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-900">Operations & Workflow</h1>
+                                    <p className="text-gray-500 text-sm mt-1">Monitor staff productivity and task completion status.</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {['todo', 'in_progress', 'done'].map((status) => (
+                                    <div key={status} className="space-y-4">
+                                        <div className="flex items-center justify-between px-2">
+                                            <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{status.replace('_', ' ')}</h3>
+                                            <Badge variant="outline" className="text-[9px] font-bold text-gray-400">{erp.tasks.filter(t => t.status === status).length}</Badge>
+                                        </div>
+                                        <div className="space-y-4">
+                                            {erp.tasks.filter(t => t.status === status).map(task => {
+                                                const emp = erp.employees.find(e => e.id === task.employee_id);
+                                                return (
+                                                    <Card key={task.id} className="border-none shadow-sm rounded-2xl bg-white p-5 group hover:shadow-md transition-shadow">
+                                                        <div className="flex justify-between items-start mb-3">
+                                                            <Badge className={`text-[8px] tracking-widest uppercase border-none px-2 py-0.5 ${task.priority === 'high' ? 'bg-rose-50 text-rose-500' : 'bg-gray-50 text-gray-500'}`}>{task.priority}</Badge>
+                                                            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary uppercase">
+                                                                {(emp?.name || "?").split(' ').map(n => n[0]).join('')}
+                                                            </div>
+                                                        </div>
+                                                        <h4 className="text-sm font-bold text-gray-800 mb-1">{task.title}</h4>
+                                                        <p className="text-[11px] text-gray-500 line-clamp-2 leading-relaxed mb-4">{task.description}</p>
+                                                        <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+                                                            <span className="text-[9px] font-bold text-gray-400 uppercase">{emp?.name}</span>
+                                                            <span className="text-[9px] font-bold text-gray-400">{task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No date'}</span>
+                                                        </div>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* EMPLOYEES VIEW */}
                     {activeView === "employees" && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
@@ -850,16 +1160,24 @@ const Admin = () => {
                                                         <Input name="name" required placeholder="Employee Name" className="rounded-xl" />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <Label className="text-[10px] uppercase font-bold text-gray-400">Role</Label>
+                                                        <Label className="text-[10px] uppercase font-bold text-gray-400">Job Title / Role</Label>
                                                         <select name="role" className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
                                                             <option value="Sales Stylist">Sales Stylist (Boutique Floor)</option>
-                                                            <option value="Inventory Manager">Inventory Manager (Stock & Batches)</option>
+                                                            <option value="Inventory Manager">Inventory Manager (Stock &amp; Batches)</option>
                                                             <option value="Store Manager">Store Manager (Operations)</option>
                                                             <option value="Tailor">Master Tailor (Atelier/Fitting)</option>
                                                             <option value="Cashier">Cashier (Finance)</option>
                                                             <option value="Social Media">Social Media Specialist</option>
                                                         </select>
                                                     </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-[10px] uppercase font-bold text-gray-400">Department (controls portal access)</Label>
+                                                    <select name="department" className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
+                                                        <option value="sales">🛍 Sales — View reservations, confirm orders, mark payment</option>
+                                                        <option value="warehouse">📦 Warehouse — View &amp; update stock, process arrivals</option>
+                                                        <option value="management">👑 Management — Full access (tasks + reservations + stock)</option>
+                                                    </select>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div className="space-y-2">
@@ -982,9 +1300,58 @@ const Admin = () => {
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-rose-50 hover:text-rose-500" onClick={() => erp.updateEmployeeStatus(emp.id, emp.status === 'active' ? 'inactive' : 'active')}>
+                                                    <div className="flex justify-end gap-2 text-right">
+                                                        <Dialog>
+                                                            <DialogTrigger asChild>
+                                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-primary/5 hover:text-primary">
+                                                                    <Briefcase size={14} />
+                                                                </Button>
+                                                            </DialogTrigger>
+                                                            <DialogContent className="rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
+                                                                <div className="bg-primary p-6 text-white">
+                                                                    <DialogHeader>
+                                                                        <DialogTitle>Assign Task to {emp.name}</DialogTitle>
+                                                                        <DialogDescription className="text-white/60 text-xs">Define operational goal and priority for this member.</DialogDescription>
+                                                                    </DialogHeader>
+                                                                </div>
+                                                                <form onSubmit={(e) => handleAssignTask(e, emp.id)} className="p-6 space-y-4">
+                                                                    <div className="space-y-2">
+                                                                        <Label className="text-[10px] uppercase font-bold text-gray-400">Task Title</Label>
+                                                                        <Input name="title" placeholder="e.g. Prepare Summer Collection Display" required className="rounded-xl border-gray-100" />
+                                                                    </div>
+                                                                    <div className="space-y-2">
+                                                                        <Label className="text-[10px] uppercase font-bold text-gray-400">Description</Label>
+                                                                        <Textarea name="description" placeholder="Provide specific instructions..." className="rounded-xl border-gray-100 min-h-[100px]" />
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 gap-4">
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-[10px] uppercase font-bold text-gray-400">Priority</Label>
+                                                                            <select name="priority" className="w-full h-10 px-3 rounded-xl border border-gray-100 bg-white text-sm">
+                                                                                <option value="low">Low</option>
+                                                                                <option value="medium">Medium</option>
+                                                                                <option value="high">High</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-[10px] uppercase font-bold text-gray-400">Due Date</Label>
+                                                                            <Input name="due_date" type="date" className="rounded-xl border-gray-100 h-10" />
+                                                                        </div>
+                                                                    </div>
+                                                                    <Button type="submit" className="w-full bg-primary text-white rounded-xl h-12 font-bold shadow-lg shadow-primary/20 mt-4">Assign Task</Button>
+                                                                </form>
+                                                            </DialogContent>
+                                                        </Dialog>
+
+                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-rose-50 hover:text-rose-500" onClick={() => erp.updateEmployee(emp.id, { status: emp.status === 'active' ? 'inactive' : 'active' })}>
                                                             {emp.status === 'active' ? <XCircle size={14} /> : <CheckCircle2 size={14} className="text-emerald-500" />}
+                                                        </Button>
+                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-rose-500 hover:bg-rose-50" onClick={() => {
+                                                            if (confirm(`Remove ${emp.name} from records?`)) {
+                                                                erp.deleteEmployee(emp.id);
+                                                                toast.success("Employee removed");
+                                                            }
+                                                        }}>
+                                                            <Trash2 size={14} />
                                                         </Button>
                                                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400">
                                                             <Settings size={14} />
@@ -1004,102 +1371,241 @@ const Admin = () => {
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h1 className="text-2xl font-bold text-gray-900">Financial Performance</h1>
-                                    <p className="text-gray-500 text-sm mt-1">Real-time profit & loss summary and full audit trail.</p>
+                                    <h1 className="text-2xl font-black text-gray-900 uppercase italic">Financial Performance</h1>
+                                    <p className="text-gray-500 text-sm mt-1">Real-time profit & loss summary and full journal ledger.</p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="outline" className="rounded-lg h-9 bg-white border-gray-100 shadow-sm text-xs px-4">Export Report</Button>
-                                    <Button variant="outline" className="rounded-lg h-9 bg-white border-gray-100 shadow-sm text-xs px-4 font-bold text-primary">Fiscal Settings</Button>
+                                    <Button variant="outline" className="rounded-xl border-gray-100"><History className="mr-2 h-4 w-4" /> Export Ledger</Button>
+                                    <Button
+                                        variant={erp.isPeriodLocked ? "destructive" : "outline"}
+                                        className="rounded-xl"
+                                        onClick={() => erp.isPeriodLocked ? erp.unlockPeriod() : erp.lockPeriod()}
+                                    >
+                                        {erp.isPeriodLocked ? <Lock className="mr-2 h-4 w-4" /> : <Settings className="mr-2 h-4 w-4" />}
+                                        {erp.isPeriodLocked ? "Unlock Period" : "Lock Period"}
+                                    </Button>
                                 </div>
                             </div>
 
                             {/* Dashboard Highlights */}
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                <Card className="border-none shadow-sm rounded-2xl bg-white p-6">
-                                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Total Sales (Cash)</p>
-                                    <p className="text-2xl font-bold text-emerald-600 mt-2">${totalRevenue.toLocaleString()}</p>
-                                    <p className="text-[9px] text-gray-400 mt-1 italic">Money received in hand</p>
+                                <Card className="border-none shadow-sm rounded-3xl bg-white p-6 border border-gray-100">
+                                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest leading-none mb-3">Gross Sales</p>
+                                    <p className="text-3xl font-black text-gray-900">${accrualRevenue.toLocaleString()}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold mt-2 uppercase tracking-tight">Accrual Basis</p>
                                 </Card>
-                                <Card className="border-none shadow-sm rounded-2xl bg-white p-6">
-                                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Pending (Unpaid)</p>
-                                    <p className="text-2xl font-bold text-amber-500 mt-2">
-                                        ${erp.orders
-                                            .filter(o => !erp.invoices.find(inv => inv.order_id === o.id && inv.status === 'paid'))
-                                            .reduce((sum, o) => sum + o.total_amount, 0).toLocaleString()}
-                                    </p>
-                                    <p className="text-[9px] text-gray-400 mt-1 italic">Sold but not yet received</p>
+                                <Card className="border-none shadow-sm rounded-3xl bg-white p-6 border border-gray-100">
+                                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest leading-none mb-3">Cash Collected</p>
+                                    <p className="text-3xl font-black text-emerald-600">${cashRevenue.toLocaleString()}</p>
+                                    <p className="text-[10px] text-emerald-500 font-bold mt-2 uppercase tracking-tight">Liquidity</p>
                                 </Card>
-                                <Card className="border-none shadow-sm rounded-2xl bg-white p-6">
-                                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Total COGS</p>
-                                    <p className="text-2xl font-bold text-rose-500 mt-2">
-                                        ${erp.journalEntries
-                                            .flatMap(e => e.items)
-                                            .filter(i => i.account_name === 'Cost of Goods Sold')
-                                            .reduce((sum, i) => sum + i.debit, 0).toLocaleString()}
+                                <Card className="border-none shadow-sm rounded-3xl bg-white p-6 border border-gray-100">
+                                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest leading-none mb-3">Recievables</p>
+                                    <p className="text-3xl font-black text-amber-500">
+                                        ${erp.invoices.filter(i => i.status !== 'paid').reduce((sum, i) => sum + (i.total_amount - i.paid_amount), 0).toLocaleString()}
                                     </p>
-                                    <p className="text-[9px] text-gray-400 mt-1 italic">What you paid for sold items</p>
+                                    <p className="text-[10px] text-gray-400 font-bold mt-2 uppercase tracking-tight">Pending Payments</p>
                                 </Card>
-                                <Card className="border-none shadow-sm rounded-2xl bg-primary/5 border-primary/10 p-6">
-                                    <p className="text-[10px] uppercase font-bold text-primary tracking-widest">Net Profit</p>
-                                    <p className="text-2xl font-black text-primary mt-2">
-                                        ${(totalRevenue - erp.journalEntries
-                                            .flatMap(e => e.items)
-                                            .filter(i => i.account_name === 'Cost of Goods Sold')
-                                            .reduce((sum, i) => sum + i.debit, 0)).toLocaleString()}
-                                    </p>
-                                    <p className="text-[9px] text-primary/60 mt-1 italic">Actual money earned</p>
+                                <Card className="border-none shadow-sm rounded-3xl bg-primary/5 text-primary p-6 border border-primary/10">
+                                    <p className="text-[10px] uppercase font-bold text-primary/60 tracking-widest leading-none mb-3">Net Operating Profit</p>
+                                    <p className="text-3xl font-black">${erp.getNetProfit().toLocaleString()}</p>
+                                    <p className="text-[10px] text-primary/60 font-bold mt-2 uppercase tracking-tight italic">EBITDA Estimated</p>
                                 </Card>
                             </div>
 
-                            <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
-                                <CardHeader className="border-b border-gray-50 px-8 py-6">
-                                    <CardTitle className="text-lg font-bold text-gray-800">Complete Transaction History</CardTitle>
-                                </CardHeader>
-                                <div className="p-0 overflow-x-auto">
-                                    <Table>
-                                        <TableHeader className="bg-gray-50/50">
-                                            <TableRow className="border-none">
-                                                <TableHead className="text-[10px] uppercase text-gray-400 pl-8">Entry Date</TableHead>
-                                                <TableHead className="text-[10px] uppercase text-gray-400">Description</TableHead>
-                                                <TableHead className="text-[10px] uppercase text-gray-400">Account Movements</TableHead>
-                                                <TableHead className="text-[10px] uppercase text-gray-400 text-right pr-8">Status</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {erp.journalEntries.slice().reverse().map((entry) => (
-                                                <TableRow key={entry.id} className="border-gray-50 h-20 hover:bg-gray-50/30 transition-colors">
-                                                    <TableCell className="pl-8">
-                                                        <p className="text-xs font-bold text-gray-900">{new Date(entry.date).toLocaleDateString()}</p>
-                                                        <p className="text-[10px] text-gray-400 font-mono">#{entry.id.slice(0, 6)}</p>
-                                                    </TableCell>
-                                                    <TableCell className="max-w-[200px]">
-                                                        <p className="text-sm font-semibold text-gray-800 truncate">{cleanDesc(entry.description)}</p>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col gap-1">
-                                                            {entry.items.map((item, idx) => (
-                                                                <div key={idx} className="flex justify-between items-center text-[10px] gap-8">
-                                                                    <span className={item.credit > 0 ? "pl-4 text-gray-400" : "font-bold text-gray-600"}>
-                                                                        {item.account_name}
-                                                                    </span>
-                                                                    <span className={item.debit > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>
-                                                                        {item.debit > 0 ? `+$${item.debit.toLocaleString()}` : `-$${item.credit.toLocaleString()}`}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-right pr-8">
-                                                        <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase border border-emerald-100">Synchronized</span>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                            {erp.journalEntries.length === 0 && (
-                                                <TableRow><TableCell colSpan={4} className="text-center py-20 text-gray-400 italic">No financial activity recorded yet</TableCell></TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
+                            <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white border border-gray-100">
+                                <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+                                    <h3 className="font-black text-gray-900 uppercase italic tracking-tighter">Double-Entry Journal</h3>
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">System Record #ERPL-2024</span>
                                 </div>
+                                <Table>
+                                    <TableHeader className="bg-white">
+                                        <TableRow className="border-none">
+                                            <TableHead className="text-[10px] uppercase text-gray-400 pl-8">Entry Date</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400">Description</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400">Ledger Movements</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 text-right pr-8">Verification</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {erp.journalEntries.slice().reverse().map((entry) => (
+                                            <TableRow key={entry.id} className="border-gray-50 h-24 hover:bg-gray-50/50 transition-all">
+                                                <TableCell className="pl-8">
+                                                    <p className="text-xs font-black text-gray-900">{new Date(entry.date).toLocaleDateString()}</p>
+                                                    <p className="text-[9px] text-gray-400 font-mono mt-0.5 tracking-tighter uppercase">#{entry.id.slice(0, 6)}</p>
+                                                </TableCell>
+                                                <TableCell className="max-w-[220px]">
+                                                    <p className="text-xs font-bold text-gray-800 leading-tight">{cleanDesc(entry.description)}</p>
+                                                    <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest mt-1 block">{entry.reference_type}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-1.5 py-2">
+                                                        {entry.items.map((item, idx) => (
+                                                            <div key={idx} className="grid grid-cols-2 gap-8 text-[10px] w-full max-w-[200px]">
+                                                                <span className={item.credit > 0 ? "pl-2 text-gray-400 font-medium" : "font-black text-gray-700 uppercase"}>
+                                                                    {item.account_name}
+                                                                </span>
+                                                                <span className={`text-right font-mono ${item.debit > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}`}>
+                                                                    {item.debit > 0 ? `DR $${item.debit.toLocaleString()}` : `CR $${item.credit.toLocaleString()}`}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right pr-8">
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase border border-emerald-100">Validated</span>
+                                                        <span className="text-[8px] font-mono text-gray-300 uppercase tracking-tighter">Block Hash: {entry.id.slice(-8)}</span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {erp.journalEntries.length === 0 && (
+                                            <TableRow><TableCell colSpan={4} className="text-center py-20 text-gray-400 italic">No historical ledger entries found.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </Card>
+                        </div>
+                    )}
+
+                    {/* SETTINGS VIEW */}
+                    {activeView === "settings" && (
+                        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                            <div>
+                                <h1 className="text-2xl font-black text-gray-900 uppercase italic">Control Center</h1>
+                                <p className="text-gray-500 text-sm mt-1">Configure business logic and system guardrails.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <Card className="border-none shadow-sm rounded-[40px] bg-white p-8 border border-gray-100">
+                                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6">
+                                        <Lock size={28} />
+                                    </div>
+                                    <h3 className="text-lg font-black text-gray-900 uppercase italic mb-2 tracking-tighter">Fiscal Integrity</h3>
+                                    <p className="text-xs text-gray-500 font-medium leading-relaxed mb-8">Locking the fiscal period prevents any new sales, stock movements, or journal entries. Required for end-of-month reporting.</p>
+
+                                    <div className="flex items-center justify-between p-4 rounded-3xl bg-gray-50 border border-gray-100">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">Status</p>
+                                            <p className={`text-xs font-bold ${erp.isPeriodLocked ? "text-rose-500" : "text-emerald-500"}`}>
+                                                {erp.isPeriodLocked ? "LOCKED (RESTRICTED)" : "OPEN (ACTIVE)"}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            variant={erp.isPeriodLocked ? "destructive" : "default"}
+                                            className="rounded-2xl px-6 font-black uppercase text-[10px] tracking-widest"
+                                            onClick={() => erp.isPeriodLocked ? erp.unlockPeriod() : erp.lockPeriod()}
+                                        >
+                                            {erp.isPeriodLocked ? "Unlock Period" : "Lock Now"}
+                                        </Button>
+                                    </div>
+                                </Card>
+
+                                <Card className="border-none shadow-sm rounded-[40px] bg-white p-8 border border-gray-100">
+                                    <div className="h-14 w-14 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 mb-6">
+                                        <TrendingUp size={28} />
+                                    </div>
+                                    <h3 className="text-lg font-black text-gray-900 uppercase italic mb-2 tracking-tighter">Costing Strategy</h3>
+                                    <p className="text-xs text-gray-500 font-medium leading-relaxed mb-8">Switch between FIFO (First-In, First-Out) or LIFO (Last-In, First-Out) for COGS calculation. </p>
+
+                                    <div className="flex gap-2">
+                                        {['FIFO', 'LIFO'].map((method) => (
+                                            <Button
+                                                key={method}
+                                                variant={erp.costMethod === method ? "default" : "outline"}
+                                                className="flex-1 rounded-2xl font-black uppercase text-[10px] tracking-widest"
+                                                onClick={() => erp.setCostMethod(method as any)}
+                                            >
+                                                {method}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </Card>
+                            </div>
+
+                            <Card className="border-none shadow-sm rounded-[40px] bg-[#1A1C1E] text-white p-10 overflow-hidden relative">
+                                <div className="absolute -bottom-20 -right-20 h-64 w-64 bg-primary/20 rounded-full blur-[100px]" />
+                                <div className="relative z-10 flex flex-col items-center text-center">
+                                    <div className="h-16 w-16 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-center mb-6">
+                                        <Settings className="text-primary animate-spin-slow" size={32} />
+                                    </div>
+                                    <h2 className="text-2xl font-black uppercase tracking-tighter italic italic">System Core Health</h2>
+                                    <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.3em] mt-2 mb-8 letter-spacing-widest">Rinas Atelier ERP v2.0.4-Stable</p>
+                                    <div className="grid grid-cols-3 gap-12 w-full">
+                                        <div className="text-center">
+                                            <p className="text-[32px] font-black text-primary leading-none">99.9%</p>
+                                            <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest mt-2">Uptime</p>
+                                        </div>
+                                        <div className="text-center border-x border-white/5">
+                                            <p className="text-[32px] font-black text-white leading-none">1ms</p>
+                                            <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest mt-2">Latency</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-[32px] font-black text-emerald-500 leading-none">OK</p>
+                                            <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest mt-2">Sync Status</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+
+                    {/* AUDIT LOG VIEW */}
+                    {activeView === "audit" && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h1 className="text-2xl font-black text-gray-900 uppercase italic">System Audit Trail</h1>
+                                    <p className="text-gray-500 text-sm mt-1">Immutable record of all business and administrative activities.</p>
+                                </div>
+                                <Button variant="outline" className="rounded-xl border-gray-100"><FileText className="mr-2 h-4 w-4" /> Download PDF Trail</Button>
+                            </div>
+
+                            <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+                                <Table>
+                                    <TableHeader className="bg-gray-50/50">
+                                        <TableRow className="border-none">
+                                            <TableHead className="text-[10px] uppercase text-gray-400 pl-8 h-12">Timestamp</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 h-12">Operator</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 h-12">Type/Action</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 h-12">Entity Relation</TableHead>
+                                            <TableHead className="text-[10px] uppercase text-gray-400 pr-8 h-12">Detail Logs</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {erp.logs?.map((log) => (
+                                            <TableRow key={log.id} className="border-gray-50 h-16 hover:bg-gray-50/20">
+                                                <TableCell className="pl-8 text-[10px] font-mono text-gray-400">
+                                                    {new Date(log.timestamp).toLocaleString()}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">A</div>
+                                                        <span className="text-xs font-bold text-gray-700">{log.user}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-tighter ${log.action === 'SALE' ? 'bg-emerald-50 text-emerald-600' :
+                                                        log.action === 'VOID' ? 'bg-rose-50 text-rose-600' :
+                                                            'bg-gray-100 text-gray-500'
+                                                        }`}>
+                                                        {log.action}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="text-[10px] font-bold text-gray-500">
+                                                    {log.entity} #{log.entity_id.slice(0, 8)}
+                                                </TableCell>
+                                                <TableCell className="text-xs text-gray-600 font-medium pr-8">
+                                                    {log.details}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {erp.logs?.length === 0 && (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-20 text-gray-400 italic font-medium">Clear audit trail. No logs generated.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
                             </Card>
                         </div>
                     )}
@@ -1131,7 +1637,7 @@ const Admin = () => {
                                 <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {erp.products.slice(0, 6).map(product => {
                                         const pVars = erp.variants.filter(v => v.product_id === product.id);
-                                        const totalStock = erp.batches.filter(b => pVars.some(v => v.id === b.product_variant_id)).reduce((s, b) => s + b.quantity_remaining, 0);
+                                        const totalStock = erp.batches.filter(b => pVars.some(v => v.id === b.product_variant_id)).reduce((s, b) => s + (b.quantity_remaining - (b.quantity_reserved || 0)), 0);
                                         return (
                                             <Card key={product.id} className="border-none shadow-sm rounded-[32px] overflow-hidden bg-white p-5 group hover:shadow-xl hover:shadow-primary/5 transition-all">
                                                 <div className="flex gap-5">

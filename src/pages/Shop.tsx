@@ -18,19 +18,38 @@ import ProductDetailModal from "@/components/ProductDetailModal";
 import { toast } from "sonner";
 import { Heart, Eye } from "lucide-react";
 
+import { useERPStore } from "@/hooks/use-erp-store";
+
 const Shop = () => {
+    const erp = useERPStore();
     const [search, setSearch] = useState("");
     const [category, setCategory] = useState("all");
     const [sortBy, setSortBy] = useState("featured");
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [selectedProduct, setSelectedProduct] = useState<any>(null);
     const { toggleFavorite, isFavorite } = useStore();
 
+    const collection = useMemo(() => {
+        const erpMapped = erp.products.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.selling_price,
+            image: p.images?.[0] || "/placeholder.svg",
+            images: p.images || ["/placeholder.svg"],
+            category: p.category_id,
+            description: p.description,
+            featured: false,
+            sizes: p.sizes,
+            colors: p.colors
+        }));
+        return [...products, ...erpMapped];
+    }, [erp.products]);
+
     const categories = useMemo(() => {
-        return ["all", ...new Set(products.map((p) => p.category.toLowerCase()))];
-    }, []);
+        return ["all", ...new Set(collection.map((p) => p.category.toLowerCase()))];
+    }, [collection]);
 
     const filteredProducts = useMemo(() => {
-        let result = products.filter((p) => {
+        let result = collection.filter((p) => {
             const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
             const matchesCategory = category === "all" || p.category.toLowerCase() === category;
             return matchesSearch && matchesCategory;
@@ -41,11 +60,11 @@ const Shop = () => {
         } else if (sortBy === "price-high") {
             result.sort((a, b) => b.price - a.price);
         } else if (sortBy === "featured") {
-            result.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+            result.sort((a, b) => ((b as any).featured ? 1 : 0) - ((a as any).featured ? 1 : 0));
         }
 
         return result;
-    }, [search, category, sortBy]);
+    }, [collection, search, category, sortBy]);
 
     const handleFavorite = (e: React.MouseEvent, productId: string) => {
         e.stopPropagation();
@@ -140,9 +159,9 @@ const Shop = () => {
                                             />
                                             <div className="absolute inset-0 bg-black/5 group-hover:bg-black/10 transition-colors" />
 
-                                            {product.tag && (
+                                            {(product as any).tag && (
                                                 <span className="absolute top-3 left-3 bg-primary/90 text-primary-foreground font-body text-[8px] tracking-[0.2em] uppercase px-3 py-1.5">
-                                                    {product.tag}
+                                                    {(product as any).tag}
                                                 </span>
                                             )}
 

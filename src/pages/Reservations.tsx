@@ -7,9 +7,25 @@ import { Calendar, CheckCircle2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
+import { useERPStore } from "@/hooks/use-erp-store";
+import { useMemo } from "react";
+
 const Reservations = () => {
     const { reservations } = useStore();
-    const reservedProducts = products.filter((p) => reservations.includes(p.id));
+    const erp = useERPStore();
+
+    const collection = useMemo(() => {
+        const erpMapped = erp.products.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.selling_price,
+            image: p.images?.[0] || "/placeholder.svg",
+            category: p.category_id,
+        }));
+        return [...products, ...erpMapped];
+    }, [erp.products]);
+
+    const reservedProducts = collection.filter((p) => reservations.includes(p.id));
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
