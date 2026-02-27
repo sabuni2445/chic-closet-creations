@@ -55,6 +55,13 @@ const ProductDetailModal = ({ product, isOpen, onClose }: ProductDetailModalProp
         const variantId = variant?.id ?? product.id;
 
         try {
+            console.log("Submitting reservation to ERP:", {
+                customer_name: currentUser.name,
+                customer_phone: currentUser.phone,
+                product_variant_id: variantId,
+                notes: `Requested: ${product.name}`
+            });
+
             erp.requestReservation({
                 customer_name: currentUser.name,
                 customer_phone: currentUser.phone,
@@ -63,10 +70,9 @@ const ProductDetailModal = ({ product, isOpen, onClose }: ProductDetailModalProp
             });
 
             reserveProduct(product.id);
-            toast.success("Fitting reserved! We'll be in touch shortly.", {
-                description: `Confirmation sent for ${product.name}.`
-            });
+            toast.success("Fitting reserved! We'll be in touch shortly.");
         } catch (err: any) {
+            console.error("Reservation Error:", err);
             toast.error(err?.message || "Could not reserve — item may be out of stock.");
         }
     };

@@ -52,7 +52,22 @@ const Shop = () => {
         let result = collection.filter((p) => {
             const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
             const matchesCategory = category === "all" || p.category.toLowerCase() === category;
-            return matchesSearch && matchesCategory;
+
+            // Stock Check: Only show if there is physical stock available
+            // 1. Find all variants for this product
+            const variants = erp.variants.filter(v => v.product_id === p.id);
+            const variantIds = variants.map(v => v.id);
+
+            // 2. Add product.id itself if it's being used as a variant ID fallback (common in this app)
+            if (!variantIds.includes(p.id)) variantIds.push(p.id);
+
+            // 3. Check if any batch for these variants has quantity > 0
+            const hasStock = erp.batches.some(b =>
+                variantIds.includes(b.product_variant_id) &&
+                (b.quantity_remaining - (b.quantity_reserved || 0)) > 0
+            );
+
+            return matchesSearch && matchesCategory && hasStock;
         });
 
         if (sortBy === "price-low") {
@@ -64,7 +79,7 @@ const Shop = () => {
         }
 
         return result;
-    }, [collection, search, category, sortBy]);
+    }, [collection, search, category, sortBy, erp.batches, erp.variants]);
 
     const handleFavorite = (e: React.MouseEvent, productId: string) => {
         e.stopPropagation();

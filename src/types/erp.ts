@@ -1,5 +1,5 @@
 
-export type TransactionType = 'IN' | 'OUT' | 'RETURN' | 'ADJUSTMENT';
+export type TransactionType = 'IN' | 'OUT' | 'RETURN' | 'ADJUSTMENT' | 'TRANSFER';
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid';
 export type OrderStatus = 'pending' | 'completed' | 'cancelled' | 'returned';
 export type CostMethod = 'FIFO' | 'LIFO';
@@ -12,6 +12,17 @@ export interface Category {
 export interface Brand {
     id: string;
     name: string;
+}
+
+export type ERPLocationType = 'warehouse' | 'store';
+
+export interface ERPLocation {
+    id: string;
+    name: string;
+    type: ERPLocationType;
+    address: string;
+    contact_phone?: string;
+    parent_id?: string; // e.g. Store belongs to a specific Warehouse
 }
 
 export interface ERPProduct {
@@ -40,6 +51,7 @@ export interface ProductVariant {
 export interface InventoryBatch {
     id: string;
     product_variant_id: string;
+    location_id: string;
     quantity_remaining: number;
     quantity_reserved?: number;
     unit_cost: number;
@@ -50,9 +62,10 @@ export interface InventoryTransaction {
     id: string;
     product_variant_id: string;
     batch_id: string;
+    location_id: string;
     type: TransactionType;
     quantity: number;
-    reference_type: string; // e.g., 'PURCHASE', 'SALE', 'RETURN'
+    reference_type: string; // e.g., 'PURCHASE', 'SALE', 'RETURN', 'TRANSFER'
     reference_id: string;
     created_at: string;
 }
@@ -140,6 +153,8 @@ export interface Employee {
     emergency_contact_phone?: string;
     guarantor_name?: string;
     guarantor_phone?: string;
+    username?: string;
+    password?: string;
 }
 
 export interface JournalEntry {
@@ -156,7 +171,7 @@ export interface JournalEntryItem {
     debit: number;
     credit: number;
 }
-export type ReservationStatus = 'pending' | 'confirmed_prepaid' | 'confirmed_paid_fully' | 'confirmed_no_prepayment' | 'completed' | 'cancelled' | 'expired';
+export type ReservationStatus = 'pending' | 'confirmed_prepaid' | 'confirmed_paid_fully' | 'confirmed_no_prepayment' | 'completed' | 'cancelled' | 'expired' | 'reserved';
 
 export interface Reservation {
     id: string;

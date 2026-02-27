@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "@/hooks/use-erp-store";
+import { useAuthStore } from "@/hooks/use-auth-store";
 import {
     Briefcase, Calendar, CheckCircle2, Clock,
     Layout, LogOut, MoreVertical, AlertCircle,
@@ -181,6 +182,14 @@ const ReservationsView = () => {
                                         {res.status === "pending" ? (
                                             <div className="flex justify-end gap-1.5">
                                                 <Button size="sm"
+                                                    className="h-9 px-3 rounded-xl bg-primary text-white font-bold text-[9px] uppercase"
+                                                    onClick={() => {
+                                                        erp.updateReservationStatus(res.id, "reserved");
+                                                        toast.success("Item tagged as RESERVED");
+                                                    }}>
+                                                    <Tag size={13} className="mr-1" /> Reserve
+                                                </Button>
+                                                <Button size="sm"
                                                     className="h-9 px-3 rounded-xl bg-emerald-600 text-white font-bold text-[9px] uppercase"
                                                     onClick={() => {
                                                         const amount = prompt("Total amount paid (ETB):");
@@ -191,10 +200,10 @@ const ReservationsView = () => {
                                                 <Button size="sm"
                                                     className="h-9 px-3 rounded-xl bg-emerald-400 text-white font-bold text-[9px] uppercase"
                                                     onClick={() => {
-                                                        const amount = prompt("Pre-payment amount (ETB):");
-                                                        if (amount) erp.updateReservationStatus(res.id, "confirmed_prepaid", Number(amount));
+                                                        const amount = prompt("Pre-payment amount (ETB) received:");
+                                                        if (amount) erp.recordPrepayment(res.id, Number(amount), "Cash/Mobile");
                                                     }}>
-                                                    <Wallet size={13} className="mr-1" /> Pre-paid
+                                                    <Wallet size={13} className="mr-1" /> Record Payment
                                                 </Button>
                                                 <Button size="sm" variant="outline"
                                                     className="h-9 px-3 rounded-xl border-rose-200 text-rose-500 hover:bg-rose-50 font-bold text-[9px] uppercase"
@@ -209,7 +218,7 @@ const ReservationsView = () => {
                                 </TableRow>
                             );
                         })}
-                        {erp.reservations.length === 0 && (
+                        {filtered.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={5} className="py-16 text-center text-gray-300 italic text-sm">
                                     No reservations yet — the queue is clear.
@@ -310,8 +319,8 @@ const StockView = () => {
                                 </TableCell>
                                 <TableCell className="pr-8">
                                     <span className={`inline-flex items-center gap-1.5 text-sm font-black px-3 py-1 rounded-full ${totalAvailable === 0 ? "bg-rose-50 text-rose-500" :
-                                            totalAvailable < 5 ? "bg-amber-50 text-amber-600" :
-                                                "bg-emerald-50 text-emerald-600"
+                                        totalAvailable < 5 ? "bg-amber-50 text-amber-600" :
+                                            "bg-emerald-50 text-emerald-600"
                                         }`}>
                                         {totalAvailable === 0 ? <XCircle size={11} /> : <CheckCircle size={11} />}
                                         {totalAvailable}
@@ -329,15 +338,40 @@ const StockView = () => {
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 const EmployeeDashboard = () => {
     const erp = useERPStore();
-    const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+    const auth = useAuthStore();
     const [activeTab, setActiveTab] = useState<string>("tasks");
 
-    const currentEmployee = useMemo(() =>
-        erp.employees.find(e => e.id === selectedEmployeeId), [erp.employees, selectedEmployeeId]);
+    const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        const username = fd.get("username") as string;
+        const password = fd.get("password") as string;
 
-    const department: EmployeeDepartment = currentEmployee?.department ?? "sales";
-    const allowedTabs = DEPT_TABS[department];
-    const deptConfig = DEPT_CONFIG[department];
+        // Verify against the main "users table" (Auth Store)
+        const authResult = auth.login(username, password);
+
+        if (authResult.success) {
+            // If auth is valid, also ensure ERP state is synced
+            const erpSuccess = erp.login(username, password);
+            if (erpSuccess) {
+                const u = username.trim().toLowerCase();
+                const user = erp.employees.find(e =>
+                    e.username?.toLowerCase() === u || e.email.toLowerCase() === u
+                );
+                if (user) {
+                    setActiveTab(DEPT_TABS[user.department][0]);
+                    toast.success(`Welcome back, ${user.name}`);
+                }
+            } else {
+                toast.error("Account found but not active in ERP records.");
+            }
+        } else {
+            toast.error(authResult.error || "Invalid credentials");
+        }
+    };
+
+    const currentEmployee = erp.currentUser;
+    const selectedEmployeeId = currentEmployee?.id;
 
     const pendingReservations = useMemo(() =>
         erp.reservations.filter(r => r.status === "pending"), [erp.reservations]);
@@ -345,51 +379,48 @@ const EmployeeDashboard = () => {
     const myTasks = useMemo(() =>
         erp.tasks.filter(t => t.employee_id === selectedEmployeeId), [erp.tasks, selectedEmployeeId]);
 
-    // ── Login screen ──────────────────────────────────────────────────────────
-    if (!selectedEmployeeId) {
+    if (!erp.currentUser) {
         return (
             <div className="min-h-screen bg-[#F8F7F4] flex items-center justify-center p-6">
                 <div className="max-w-md w-full">
                     <div className="text-center mb-10">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-[#111214] rounded-3xl mb-5">
-                            <Shield size={28} className="text-primary" />
+                        <div className="inline-flex items-center justify-center w-20 h-20 bg-[#111214] rounded-[32px] mb-6 shadow-2xl shadow-black/10">
+                            <Shield size={32} className="text-primary" />
                         </div>
                         <h1 className="text-3xl font-display font-light text-gray-900 uppercase tracking-[0.2em] leading-tight">Staff Portal</h1>
-                        <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Rina's Atelier · Choose Your Profile</p>
+                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-2">Rinas Closet · Secure Access</p>
                     </div>
 
-                    <div className="space-y-3">
-                        {erp.employees.filter(e => e.status === "active").map(emp => {
-                            const dept = emp.department ?? "sales";
-                            const dc = DEPT_CONFIG[dept];
-                            return (
-                                <button
-                                    key={emp.id}
-                                    onClick={() => { setSelectedEmployeeId(emp.id); setActiveTab(DEPT_TABS[dept][0]); }}
-                                    className="w-full flex items-center gap-4 p-5 rounded-2xl bg-white border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group"
-                                >
-                                    <div className="h-12 w-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center font-black text-gray-700 uppercase text-sm group-hover:bg-primary/5 group-hover:text-primary group-hover:border-primary/20 transition-all">
-                                        {emp.name.split(" ").map(n => n[0]).join("")}
-                                    </div>
-                                    <div className="text-left flex-1">
-                                        <p className="text-sm font-bold text-gray-900">{emp.name}</p>
-                                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-tight">{emp.role}</p>
-                                    </div>
-                                    <div className={`flex items-center gap-1.5 ${dc.color} text-white text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-xl`}>
-                                        {dc.icon} {dc.label}
-                                    </div>
-                                    <ChevronRight size={15} className="text-gray-300 group-hover:text-primary transition-colors" />
-                                </button>
-                            );
-                        })}
-                        {erp.employees.filter(e => e.status === "active").length === 0 && (
-                            <div className="text-center py-12 text-gray-300 text-sm italic">No active staff profiles found.</div>
-                        )}
-                    </div>
+                    <Card className="border-none shadow-2xl rounded-[32px] overflow-hidden bg-white p-8">
+                        <form onSubmit={handleLogin} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Username</label>
+                                <input
+                                    name="username"
+                                    required
+                                    className="w-full h-14 px-5 rounded-2xl bg-gray-50 border border-gray-100 focus:outline-none focus:border-primary/30 focus:ring-4 focus:ring-primary/5 transition-all text-sm font-bold"
+                                    placeholder="your.name"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Password</label>
+                                <input
+                                    name="password"
+                                    type="password"
+                                    required
+                                    className="w-full h-14 px-5 rounded-2xl bg-gray-50 border border-gray-100 focus:outline-none focus:border-primary/30 focus:ring-4 focus:ring-primary/5 transition-all text-sm font-bold"
+                                    placeholder="••••••••"
+                                />
+                            </div>
+                            <Button type="submit" className="w-full h-14 rounded-2xl bg-primary text-white font-black uppercase tracking-widest text-xs shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                                Authenticate Profile
+                            </Button>
+                        </form>
+                    </Card>
 
-                    <div className="mt-8 text-center">
-                        <Link to="/" className="text-[10px] uppercase font-black text-gray-300 tracking-widest hover:text-primary transition-colors">
-                            ← Return to Boutique
+                    <div className="mt-12 text-center">
+                        <Link to="/" className="text-[10px] uppercase font-black text-gray-300 tracking-widest hover:text-primary transition-colors flex items-center justify-center gap-2">
+                            <ChevronRight size={12} className="rotate-180" /> Back to Boutique
                         </Link>
                     </div>
                 </div>
@@ -397,13 +428,19 @@ const EmployeeDashboard = () => {
         );
     }
 
+    const department: EmployeeDepartment = currentEmployee?.department ?? "sales";
+    const allowedTabs = DEPT_TABS[department];
+    const deptConfig = DEPT_CONFIG[department];
+
+
+
     // ── Dashboard ─────────────────────────────────────────────────────────────
     return (
         <div className="min-h-screen bg-[#F8F7F4] flex">
             {/* Sidebar */}
             <aside className="w-72 bg-[#111214] text-white flex flex-col sticky top-0 h-screen">
                 <div className="p-8 border-b border-white/5">
-                    <h2 className="text-lg font-display font-light uppercase tracking-[0.3em] text-white leading-none">Rina's</h2>
+                    <h2 className="text-lg font-display font-light uppercase tracking-[0.3em] text-white leading-none">Rinas Closet</h2>
                     <p className="text-[8px] font-bold text-primary uppercase tracking-[0.4em] mt-1.5">Staff Portal</p>
                 </div>
 
@@ -451,7 +488,7 @@ const EmployeeDashboard = () => {
                     </div>
                     <Button
                         variant="ghost"
-                        onClick={() => setSelectedEmployeeId(null)}
+                        onClick={() => erp.logout()}
                         className="w-full justify-start text-white/30 hover:text-rose-400 hover:bg-rose-400/10 rounded-xl uppercase text-[9px] font-black tracking-widest h-9"
                     >
                         <LogOut size={14} className="mr-2" /> Sign Out
