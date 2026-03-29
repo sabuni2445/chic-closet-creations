@@ -87,14 +87,21 @@ const TasksView = ({ employeeId }: { employeeId: string }) => {
                             {task.status !== "done" ? (
                                 <>
                                     <Button
-                                        onClick={() => erp.updateTaskStatus(task.id, "done")}
+                                        onClick={async () => {
+                                            await erp.updateTaskStatus(task.id, "done");
+                                            toast.success("Task completed!");
+                                        }}
                                         className="flex-1 bg-primary text-white h-11 rounded-2xl font-bold text-xs shadow-lg shadow-primary/20"
                                     >
                                         <CheckCircle2 size={14} className="mr-2" /> Mark Done
                                     </Button>
                                     <Button
                                         variant="ghost"
-                                        onClick={() => erp.updateTaskStatus(task.id, task.status === "in_progress" ? "todo" : "in_progress")}
+                                        onClick={async () => {
+                                            const newStatus = task.status === "in_progress" ? "todo" : "in_progress";
+                                            await erp.updateTaskStatus(task.id, newStatus);
+                                            toast.success(`Task status: ${newStatus.replace("_", " ")}`);
+                                        }}
                                         className="h-11 w-11 rounded-2xl bg-gray-50 text-gray-500 hover:bg-gray-100"
                                     >
                                         {task.status === "in_progress" ? <Clock size={15} /> : <AlertCircle size={15} />}
@@ -183,31 +190,42 @@ const ReservationsView = () => {
                                             <div className="flex justify-end gap-1.5">
                                                 <Button size="sm"
                                                     className="h-9 px-3 rounded-xl bg-primary text-white font-bold text-[9px] uppercase"
-                                                    onClick={() => {
-                                                        erp.updateReservationStatus(res.id, "reserved");
+                                                    onClick={async () => {
+                                                        await erp.updateReservationStatus(res.id, "reserved");
                                                         toast.success("Item tagged as RESERVED");
                                                     }}>
                                                     <Tag size={13} className="mr-1" /> Reserve
                                                 </Button>
                                                 <Button size="sm"
                                                     className="h-9 px-3 rounded-xl bg-emerald-600 text-white font-bold text-[9px] uppercase"
-                                                    onClick={() => {
+                                                    onClick={async () => {
                                                         const amount = prompt("Total amount paid (ETB):");
-                                                        if (amount) erp.updateReservationStatus(res.id, "confirmed_paid_fully", Number(amount));
+                                                        if (amount) {
+                                                            await erp.updateReservationStatus(res.id, "confirmed_paid_fully", Number(amount));
+                                                            toast.success("Payment recorded and confirmed");
+                                                        }
                                                     }}>
                                                     <CheckCircle2 size={13} className="mr-1" /> Paid
                                                 </Button>
                                                 <Button size="sm"
                                                     className="h-9 px-3 rounded-xl bg-emerald-400 text-white font-bold text-[9px] uppercase"
-                                                    onClick={() => {
+                                                    onClick={async () => {
                                                         const amount = prompt("Pre-payment amount (ETB) received:");
-                                                        if (amount) erp.recordPrepayment(res.id, Number(amount), "Cash/Mobile");
+                                                        if (amount) {
+                                                            await erp.recordPrepayment(res.id, Number(amount), "Cash/Mobile");
+                                                            toast.success("Prepayment recorded successfully");
+                                                        }
                                                     }}>
                                                     <Wallet size={13} className="mr-1" /> Record Payment
                                                 </Button>
                                                 <Button size="sm" variant="outline"
                                                     className="h-9 px-3 rounded-xl border-rose-200 text-rose-500 hover:bg-rose-50 font-bold text-[9px] uppercase"
-                                                    onClick={() => erp.updateReservationStatus(res.id, "cancelled")}>
+                                                    onClick={async () => {
+                                                        if (confirm("Cancel this reservation?")) {
+                                                            await erp.updateReservationStatus(res.id, "cancelled");
+                                                            toast.success("Reservation cancelled");
+                                                        }
+                                                    }}>
                                                     <XCircle size={13} className="mr-1" /> Cancel
                                                 </Button>
                                             </div>
@@ -341,32 +359,26 @@ const EmployeeDashboard = () => {
     const auth = useAuthStore();
     const [activeTab, setActiveTab] = useState<string>("tasks");
 
-    const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         const username = fd.get("username") as string;
         const password = fd.get("password") as string;
 
-        // Verify against the main "users table" (Auth Store)
-        const authResult = auth.login(username, password);
+        // Staff Portal login uses the specific credentials assigned in the Employee Registry
+        const success = erp.login(username, password);
 
-        if (authResult.success) {
-            // If auth is valid, also ensure ERP state is synced
-            const erpSuccess = erp.login(username, password);
-            if (erpSuccess) {
-                const u = username.trim().toLowerCase();
-                const user = erp.employees.find(e =>
-                    e.username?.toLowerCase() === u || e.email.toLowerCase() === u
-                );
-                if (user) {
-                    setActiveTab(DEPT_TABS[user.department][0]);
-                    toast.success(`Welcome back, ${user.name}`);
-                }
-            } else {
-                toast.error("Account found but not active in ERP records.");
+        if (success) {
+            const u = username.trim().toLowerCase();
+            const user = erp.employees.find(e =>
+                e.username?.toLowerCase() === u || e.email.toLowerCase() === u
+            );
+            if (user) {
+                setActiveTab(DEPT_TABS[user.department][0]);
+                toast.success(`Welcome back, ${user.name}`);
             }
         } else {
-            toast.error(authResult.error || "Invalid credentials");
+            toast.error("Invalid Staff ID or Secret Key. Please contact administrator.");
         }
     };
 

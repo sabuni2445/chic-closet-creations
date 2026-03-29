@@ -31,14 +31,14 @@ const Auth = () => {
         e.preventDefault();
         setLoading(true);
         if (mode === "login") {
-            const result = login(form.email, form.password);
+            const result = await login(form.email, form.password);
             if (result.success) { toast.success("Welcome back!"); navigate("/account"); }
             else toast.error(result.error);
         } else {
             if (!form.name || !form.email || !form.phone || !form.password) { toast.error("Please fill in all fields."); setLoading(false); return; }
             if (form.password !== form.confirm) { toast.error("Passwords do not match."); setLoading(false); return; }
             if (form.password.length < 6) { toast.error("Password must be at least 6 characters."); setLoading(false); return; }
-            const result = register(form.name, form.email, form.phone, form.password);
+            const result = await register(form.name, form.email, form.phone, form.password);
             if (result.success) { toast.success("Account created! Welcome."); navigate("/account"); }
             else toast.error(result.error);
         }

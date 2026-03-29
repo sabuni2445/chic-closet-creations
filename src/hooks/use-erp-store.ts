@@ -41,7 +41,7 @@ interface ERPState {
     locations: ERPLocation[];
     login: (username: string, password: string) => boolean;
     logout: () => void;
-    addLocation: (location: ERPLocation) => void;
+    addLocation: (location: ERPLocation) => Promise<void>;
     updateLocation: (id: string, location: Partial<ERPLocation>) => void;
     deleteLocation: (id: string) => void;
     transferStock: (params: {
@@ -53,47 +53,47 @@ interface ERPState {
     }) => void;
 
     // Core Actions
-    addProduct: (product: ERPProduct) => void;
-    updateProduct: (id: string, product: Partial<ERPProduct>) => void;
-    deleteProduct: (id: string) => void;
-    addVariant: (variant: ProductVariant) => void;
-    updateVariant: (id: string, variant: Partial<ProductVariant>) => void;
-    addCategory: (category: Category) => void;
-    addBrand: (brand: Brand) => void;
-    deleteCategory: (id: string) => void;
-    deleteBrand: (id: string) => void;
-    addBatch: (batch: Omit<InventoryBatch, 'id'>) => void;
+    addProduct: (product: ERPProduct) => Promise<void>;
+    updateProduct: (id: string, product: Partial<ERPProduct>) => Promise<void>;
+    deleteProduct: (id: string) => Promise<void>;
+    addVariant: (variant: ProductVariant) => Promise<void>;
+    updateVariant: (id: string, variant: Partial<ProductVariant>) => Promise<void>;
+    addCategory: (category: Category) => Promise<void>;
+    addBrand: (brand: Brand) => Promise<void>;
+    deleteCategory: (id: string) => Promise<void>;
+    deleteBrand: (id: string) => Promise<void>;
+    addBatch: (batch: Omit<InventoryBatch, 'id'>) => Promise<void>;
     setCostMethod: (method: CostMethod) => void;
 
     // Modified Actions for Financial Integrity
     voidBatch: (id: string, reason: string) => void;
     updateBatch: (id: string, batch: Partial<InventoryBatch>) => void;
-    addEmployee: (employee: Employee) => void;
-    updateEmployee: (id: string, employee: Partial<Employee>) => void;
-    deleteEmployee: (id: string) => void;
+    addEmployee: (employee: Employee) => Promise<void>;
+    updateEmployee: (id: string, employee: Partial<Employee>) => Promise<void>;
+    deleteEmployee: (id: string) => Promise<void>;
     lockPeriod: () => void;
     unlockPeriod: () => void;
 
     // Transactional Business Logic
-    processSale: (customerId: string, items: { variantId: string, quantity: number, price: number }[]) => string | null;
-    processPayment: (invoiceId: string, amount: number, method: string) => void;
+    processSale: (customerId: string, items: { variantId: string, quantity: number, price: number }[]) => Promise<string | null>;
+    processPayment: (invoiceId: string, amount: number, method: string) => Promise<void>;
     processReturn: (orderId: string, items: { orderItemId: string, quantity: number }[]) => void;
     processRefund: (returnId: string, amount: number, method: string) => void;
 
     // Reservation & Staff Actions
-    requestReservation: (reservation: Omit<Reservation, 'id' | 'status' | 'created_at'>) => void;
-    updateReservationStatus: (id: string, status: ReservationStatus, prepayment?: number) => void;
-    recordPrepayment: (id: string, amount: number, method: string) => void;
-    addTask: (task: Omit<EmployeeTask, 'id' | 'created_at'>) => void;
-    updateTaskStatus: (id: string, status: EmployeeTask['status']) => void;
+    requestReservation: (reservation: Omit<Reservation, 'id' | 'status' | 'created_at'>) => Promise<void>;
+    updateReservationStatus: (id: string, status: ReservationStatus, prepayment?: number) => Promise<void>;
+    recordPrepayment: (id: string, amount: number, method: string) => Promise<void>;
+    addTask: (task: Omit<EmployeeTask, 'id' | 'created_at'>) => Promise<void>;
+    updateTaskStatus: (id: string, status: EmployeeTask['status']) => Promise<void>;
 
     // Stock Adjustment (Damage / Loss / Correction / Return)
     adjustStock: (params: {
         batchId: string;
-        type: 'damage' | 'loss' | 'correction' | 'return';
+        type: 'damage' | 'loss' | 'found' | 'correction';
         quantity: number;   // positive = add, negative = remove
         reason: string;
-    }) => void;
+    }) => Promise<void>;
 
     // Helpers
     getInventoryValue: () => number;
@@ -102,7 +102,10 @@ interface ERPState {
     getTotalCOGS: () => number;
     getNetProfit: () => number;
     addLog: (action: string, entity: string, id: string, details: string) => void;
+    fetchERPState: () => Promise<void>;
 }
+
+import { api } from "../lib/api";
 
 export const useERPStore = create<ERPState>()(
     persist(
@@ -122,22 +125,39 @@ export const useERPStore = create<ERPState>()(
             isPeriodLocked: false,
             reservations: [],
             tasks: [],
-            categories: [
-                { id: "Evening", name: "Evening" },
-                { id: "Cocktail", name: "Cocktail" },
-                { id: "Bridal", name: "Bridal" },
-                { id: "Casual", name: "Casual" },
-                { id: "Summer", name: "Summer" }
-            ],
-            brands: [{ id: "Rinas Closet", name: "Rinas Closet" }],
+            categories: [], // Loaded from backend
+            brands: [],     // Loaded from backend
             costMethod: 'FIFO',
             currentUser: null,
-            locations: [
-                { id: "main", name: "Rinas Boutique (Atelier)", type: "store", address: "Bole Road, Addis Ababa", contact_phone: "+251911..." }
-            ],
+            locations: [],  // Loaded from backend
+
+            fetchERPState: async () => {
+                try {
+                    const state = await api.get('/erp/state');
+                    set({
+                        products: state.products || [],
+                        variants: state.variants || [],
+                        batches: state.batches || [],
+                        transactions: state.transactions || [],
+                        categories: state.categories || [],
+                        brands: state.brands || [],
+                        locations: state.locations || [],
+                        reservations: state.reservations || [],
+                        journalEntries: state.journalEntries || [],
+                        employees: state.employees || [],
+                        orders: state.orders || [],
+                        invoices: state.invoices || [],
+                        payments: state.payments || [],
+                        tasks: state.tasks || []
+                    });
+                    console.log("ERP State synced with MySQL");
+                } catch (error) {
+                    console.error("Failed to sync with MySQL:", error);
+                }
+            },
 
             login: (username, password) => {
-                const u = username.trim().toLowerCase();
+                const u = username.trim().toLowerCase().replace(/^@/, '');
                 const p = password.trim();
                 const emp = get().employees.find(e =>
                     (e.username?.toLowerCase() === u || e.email.toLowerCase() === u) &&
@@ -170,7 +190,15 @@ export const useERPStore = create<ERPState>()(
                 }, ...state.logs].slice(0, 500)
             })),
 
-            addLocation: (loc) => set(state => ({ locations: [...state.locations, loc] })),
+            addLocation: async (location) => {
+                try {
+                    await api.post('/locations', location);
+                    await get().fetchERPState();
+                    get().addLog("CREATE", "Location", location.id, `Added location: ${location.name}`);
+                } catch (e: any) {
+                    console.error("Failed to add location:", e);
+                }
+            },
             updateLocation: (id, loc) => set(state => ({
                 locations: state.locations.map(l => l.id === id ? { ...l, ...loc } : l)
             })),
@@ -232,44 +260,113 @@ export const useERPStore = create<ERPState>()(
                 get().addLog("TRANSFER", "Stock", variantId, `Moved ${quantity} units from ${fromLocationId} to ${toLocationId}`);
             },
 
-            addProduct: (product) => {
-                set((state) => ({ products: [...state.products, product] }));
-                get().addLog("CREATE", "Product", product.id, `Added product: ${product.name}`);
+            addProduct: async (product) => {
+                try {
+                    await api.post('/products', product);
+                    await get().fetchERPState();
+                    get().addLog("CREATE", "Product", product.id, `Added product: ${product.name}`);
+                } catch (e: any) {
+                    console.error("Failed to add product:", e);
+                    throw e;
+                }
             },
 
-            updateProduct: (id, data) => {
-                set((state) => ({
-                    products: state.products.map(p => p.id === id ? { ...p, ...data } : p)
-                }));
-                get().addLog("UPDATE", "Product", id, `Updated product details`);
+            updateProduct: async (id, data) => {
+                try {
+                    await api.patch(`/products/${id}`, data);
+
+                    // Refresh full state
+                    await get().fetchERPState();
+
+                    get().addLog("UPDATE", "Product", id, `Updated product details`);
+                } catch (e: any) {
+                    console.error("Failed to update product:", e);
+                    throw e;
+                }
             },
 
-            deleteProduct: (id) => {
-                const product = get().products.find(p => p.id === id);
-                set((state) => ({
-                    products: state.products.filter(p => p.id !== id),
-                    variants: state.variants.filter(v => v.product_id !== id)
-                }));
-                get().addLog("DELETE", "Product", id, `Removed product: ${product?.name}`);
+            deleteProduct: async (id) => {
+                try {
+                    await api.delete(`/products/${id}`);
+                    await get().fetchERPState();
+                    get().addLog("DELETE", "Product", id, `Removed product from system`);
+                } catch (e: any) {
+                    console.error("Failed to delete product:", e);
+                    throw e;
+                }
             },
 
-            addVariant: (variant) => set((state) => ({ variants: [...state.variants, variant] })),
+            addVariant: async (variant) => {
+                try {
+                    await api.post('/variants', variant);
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to add variant:", e);
+                    throw e;
+                }
+            },
 
-            updateVariant: (id, data) => set((state) => ({
-                variants: state.variants.map(v => v.id === id ? { ...v, ...data } : v)
-            })),
-            addCategory: (category) => set((state) => ({ categories: [...state.categories, category] })),
-            addBrand: (brand) => set((state) => ({ brands: [...state.brands, brand] })),
-            deleteCategory: (id) => set((state) => ({ categories: state.categories.filter(c => c.id !== id) })),
-            deleteBrand: (id) => set((state) => ({ brands: state.brands.filter(b => b.id !== id) })),
+            updateVariant: async (id, data) => {
+                try {
+                    await api.patch(`/variants/${id}`, data);
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to update variant:", e);
+                }
+            },
 
-            addBatch: (batch) => {
-                const id = crypto.randomUUID();
+            addCategory: async (category) => {
+                try {
+                    await api.post('/categories', { name: category.name });
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to add category:", e);
+                }
+            },
+
+            addBrand: async (brand) => {
+                try {
+                    await api.post('/brands', { name: brand.name });
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to add brand:", e);
+                }
+            },
+
+            deleteCategory: async (id) => {
+                try {
+                    await api.delete(`/categories/${id}`);
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to delete category:", e);
+                }
+            },
+
+            deleteBrand: async (id) => {
+                try {
+                    await api.delete(`/brands/${id}`);
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to delete brand:", e);
+                }
+            },
+
+            addBatch: async (batch) => {
                 const locId = batch.location_id || "main"; // Fallback to main
-                set((state) => ({
-                    batches: [...state.batches, { ...batch, id, location_id: locId }]
-                }));
-                get().addLog("STOCK", "Batch", id, `Added stock to ${locId}: ${batch.quantity_remaining} units`);
+                try {
+                    await api.post('/batches', {
+                        ...batch,
+                        location_id: locId,
+                        unit_cost: Number(batch.unit_cost)
+                    });
+
+                    // Refresh full state
+                    await get().fetchERPState();
+
+                    get().addLog("STOCK", "Batch", "NEW", `Added stock to ${locId}: ${batch.quantity_remaining} units`);
+                } catch (e: any) {
+                    console.error("Batch creation failed:", e);
+                }
             },
 
             setCostMethod: (method) => {
@@ -277,19 +374,33 @@ export const useERPStore = create<ERPState>()(
                 get().addLog("CONFIG", "System", "CostMethod", `Costing method set to ${method}`);
             },
 
-            addEmployee: (employee) => {
-                set((state) => ({ employees: [...state.employees, employee] }));
-                get().addLog("HIRE", "Employee", employee.id, `Hired: ${employee.name}`);
+            addEmployee: async (employee) => {
+                try {
+                    await api.post('/employees', employee);
+                    await get().fetchERPState();
+                    get().addLog("HIRE", "Employee", employee.id, `Hired: ${employee.name}`);
+                } catch (e: any) {
+                    console.error("Failed to add employee:", e);
+                }
             },
 
-            updateEmployee: (id, data) => set((state) => ({
-                employees: state.employees.map(emp => emp.id === id ? { ...emp, ...data } : emp)
-            })),
+            updateEmployee: async (id, data) => {
+                try {
+                    await api.patch(`/employees/${id}`, data);
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to update employee:", e);
+                }
+            },
 
-            deleteEmployee: (id) => {
-                const emp = get().employees.find(e => e.id === id);
-                set((state) => ({ employees: state.employees.filter(emp => emp.id !== id) }));
-                get().addLog("TERMINATE", "Employee", id, `Removed record: ${emp?.name}`);
+            deleteEmployee: async (id) => {
+                try {
+                    await api.delete(`/employees/${id}`);
+                    await get().fetchERPState();
+                    get().addLog("TERMINATE", "Employee", id, `Removed record`);
+                } catch (e: any) {
+                    console.error("Failed to delete employee:", e);
+                }
             },
 
             lockPeriod: () => {
@@ -316,153 +427,39 @@ export const useERPStore = create<ERPState>()(
                 batches: state.batches.map(b => b.id === id ? { ...b, ...data } : b)
             })),
 
-            processSale: (customerId, saleItems) => {
-                const state = get();
-                if (state.isPeriodLocked) return null;
-
-                const orderId = crypto.randomUUID();
-                const timestamp = new Date().toISOString();
-                let totalOrderAmount = 0;
-                let totalCOGS = 0;
-
-                const newOrderItems: OrderItem[] = [];
-                const newOrderItemBatches: OrderItemBatch[] = [];
-                const updatedBatches = [...state.batches];
-                const newTransactions: InventoryTransaction[] = [];
+            processSale: async (customerId, items) => {
+                if (get().isPeriodLocked) return null;
 
                 try {
-                    for (const item of saleItems) {
-                        let remainingToDeduct = item.quantity;
-                        let itemCOGS = 0;
-                        const orderItemId = crypto.randomUUID();
+                    const result = await api.post('/orders', {
+                        customerId,
+                        items,
+                        costMethod: get().costMethod
+                    });
 
-                        let candidateBatches = updatedBatches
-                            .filter(b => b.product_variant_id === item.variantId && (b.quantity_remaining - (b.quantity_reserved || 0)) > 0);
+                    // Refresh full state to stay in sync
+                    await get().fetchERPState();
 
-                        // If sale doesn't specify location, it takes from any location (for now)
-                        // In a real system, we'd pass locationId to processSale
-                        // Let's assume most sales happen at 'main' (Boutique)
-                        candidateBatches = candidateBatches.sort((a, b) => {
-                            if (a.location_id === 'main' && b.location_id !== 'main') return -1;
-                            if (a.location_id !== 'main' && b.location_id === 'main') return 1;
-                            return 0;
-                        });
-
-                        candidateBatches.sort((a, b) => {
-                            const timeA = new Date(a.purchase_date).getTime();
-                            const timeB = new Date(b.purchase_date).getTime();
-                            return state.costMethod === 'FIFO' ? timeA - timeB : timeB - timeA;
-                        });
-
-                        const availableStock = candidateBatches.reduce((sum, b) => sum + (b.quantity_remaining - (b.quantity_reserved || 0)), 0);
-                        if (availableStock < item.quantity) throw new Error("Insufficient Stock");
-
-                        for (const batch of candidateBatches) {
-                            if (remainingToDeduct <= 0) break;
-                            const batchAvailable = batch.quantity_remaining - (batch.quantity_reserved || 0);
-                            const quantityFromBatch = Math.min(batchAvailable, remainingToDeduct);
-
-                            const bIdx = updatedBatches.findIndex(b => b.id === batch.id);
-                            updatedBatches[bIdx] = { ...updatedBatches[bIdx], quantity_remaining: updatedBatches[bIdx].quantity_remaining - quantityFromBatch };
-
-                            newOrderItemBatches.push({
-                                id: crypto.randomUUID(),
-                                order_item_id: orderItemId,
-                                batch_id: batch.id,
-                                quantity: quantityFromBatch,
-                                cost_at_time: batch.unit_cost
-                            });
-
-                            newTransactions.push({
-                                id: crypto.randomUUID(),
-                                product_variant_id: item.variantId,
-                                batch_id: batch.id,
-                                location_id: batch.location_id,
-                                type: 'OUT',
-                                quantity: quantityFromBatch,
-                                reference_type: 'SALE',
-                                reference_id: orderId,
-                                created_at: timestamp
-                            });
-
-                            itemCOGS += (quantityFromBatch * batch.unit_cost);
-                            remainingToDeduct -= quantityFromBatch;
-                        }
-
-                        newOrderItems.push({
-                            id: orderItemId,
-                            order_id: orderId,
-                            product_variant_id: item.variantId,
-                            quantity: item.quantity,
-                            price_at_time: item.price,
-                            cost_at_time: itemCOGS / item.quantity
-                        });
-
-                        totalOrderAmount += (item.quantity * item.price);
-                        totalCOGS += itemCOGS;
-                    }
-
-                    const newOrder: Order = { id: orderId, customer_id: customerId, status: 'completed', total_amount: totalOrderAmount, created_at: timestamp };
-                    const newInvoice: Invoice = { id: crypto.randomUUID(), customer_id: customerId, order_id: orderId, total_amount: totalOrderAmount, paid_amount: 0, status: 'unpaid' };
-                    const journalEntry: JournalEntry = {
-                        id: crypto.randomUUID(),
-                        date: timestamp,
-                        description: `Sale to ${customerId}`,
-                        reference_type: 'SALE',
-                        reference_id: orderId,
-                        items: [
-                            { account_name: 'Accounts Receivable', debit: totalOrderAmount, credit: 0 },
-                            { account_name: 'Revenue', debit: 0, credit: totalOrderAmount },
-                            { account_name: 'COGS', debit: totalCOGS, credit: 0 },
-                            { account_name: 'Inventory', debit: 0, credit: totalCOGS }
-                        ]
-                    };
-
-                    set((state) => ({
-                        orders: [...state.orders, newOrder],
-                        orderItems: [...state.orderItems, ...newOrderItems],
-                        orderItemBatches: [...state.orderItemBatches, ...newOrderItemBatches],
-                        batches: updatedBatches,
-                        transactions: [...state.transactions, ...newTransactions],
-                        invoices: [...state.invoices, newInvoice],
-                        journalEntries: [...state.journalEntries, journalEntry]
-                    }));
-                    get().addLog("SALE", "Order", orderId, `Processed sale: $${totalOrderAmount}`);
-                    return orderId;
-                } catch (e) {
-                    console.error("Sale transaction failed, state unchanged.", e);
+                    get().addLog("SALE", "Order", result.orderId, `Processed sale: $${result.totalOrderAmount}`);
+                    return result.orderId;
+                } catch (e: any) {
+                    console.error("Sale transaction failed:", e);
                     return null;
                 }
             },
 
-            processPayment: (invoiceId, amount, method) => {
+            processPayment: async (invoiceId, amount, method) => {
                 if (get().isPeriodLocked) return;
-                set((state) => {
-                    const invoiceIndex = state.invoices.findIndex(inv => inv.id === invoiceId);
-                    if (invoiceIndex === -1) return state;
+                try {
+                    await api.post('/payments', { invoiceId, amount, paymentMethod: method });
 
-                    const updatedInvoices = [...state.invoices];
-                    const invoice = { ...updatedInvoices[invoiceIndex] };
-                    invoice.paid_amount += amount;
-                    invoice.status = invoice.paid_amount >= invoice.total_amount ? 'paid' : 'partial';
-                    updatedInvoices[invoiceIndex] = invoice;
+                    // Refresh full state
+                    await get().fetchERPState();
 
-                    const payment: Payment = { id: crypto.randomUUID(), invoice_id: invoiceId, amount, payment_method: method, payment_date: new Date().toISOString() };
-                    const journalEntry: JournalEntry = {
-                        id: crypto.randomUUID(),
-                        date: new Date().toISOString(),
-                        description: `Payment for Invoice ${invoiceId}`,
-                        reference_type: 'PAYMENT',
-                        reference_id: payment.id,
-                        items: [
-                            { account_name: 'Cash', debit: amount, credit: 0 },
-                            { account_name: 'Accounts Receivable', debit: 0, credit: amount }
-                        ]
-                    };
-
-                    return { invoices: updatedInvoices, payments: [...state.payments, payment], journalEntries: [...state.journalEntries, journalEntry] };
-                });
-                get().addLog("PAYMENT", "Invoice", invoiceId, `Recorded payment of $${amount}`);
+                    get().addLog("PAYMENT", "Invoice", invoiceId, `Recorded payment of $${amount}`);
+                } catch (e: any) {
+                    console.error("Payment registration failed:", e);
+                }
             },
 
             processReturn: (orderId, returnItems) => {
@@ -526,312 +523,88 @@ export const useERPStore = create<ERPState>()(
                 get().addLog("REFUND", "Return", returnId, `Refunded $${amount}`);
             },
 
-            requestReservation: (res) => {
+            requestReservation: async (res) => {
                 const state = get();
                 const variantId = res.product_variant_id;
 
-                // Find available stock
-                const candidateBatches = [...state.batches].filter(b => b.product_variant_id === variantId);
-                candidateBatches.sort((a, b) => new Date(a.purchase_date).getTime() - new Date(b.purchase_date).getTime());
+                try {
+                    // 1. Post to backend
+                    await api.post('/reservations', {
+                        customer_name: res.customer_name,
+                        customer_phone: res.customer_phone,
+                        product_variant_id: variantId,
+                        notes: res.notes
+                    });
 
-                let quantityToReserve = 1;
-                let available = 0;
-                for (const b of candidateBatches) {
-                    available += (b.quantity_remaining - (b.quantity_reserved || 0));
+                    // 2. Refresh full state from backend to get the new ID and updated stock
+                    await get().fetchERPState();
+
+                    get().addLog("RESERVE", "Reservation", "NEW", `New reservation request from ${res.customer_name}`);
+                } catch (error) {
+                    console.error("Reservation Error:", error);
+                    throw error;
                 }
-
-                if (available < quantityToReserve) {
-                    console.warn("Insufficient available physical stock to fully link this reservation to a batch, but recording request anyway.");
-                }
-
-                const reserved_batches: { batch_id: string, quantity: number }[] = [];
-                const updatedBatches = [...state.batches];
-
-                for (const batch of candidateBatches) {
-                    if (quantityToReserve <= 0) break;
-                    const batchAvailable = batch.quantity_remaining - (batch.quantity_reserved || 0);
-                    if (batchAvailable > 0) {
-                        const reserveQty = Math.min(batchAvailable, quantityToReserve);
-                        reserved_batches.push({ batch_id: batch.id, quantity: reserveQty });
-
-                        const bIdx = updatedBatches.findIndex(b => b.id === batch.id);
-                        updatedBatches[bIdx] = {
-                            ...updatedBatches[bIdx],
-                            quantity_reserved: (updatedBatches[bIdx].quantity_reserved || 0) + reserveQty
-                        };
-
-                        quantityToReserve -= reserveQty;
-                    }
-                }
-
-                const id = crypto.randomUUID();
-                const newRes: Reservation = {
-                    ...res,
-                    id,
-                    status: 'pending',
-                    created_at: new Date().toISOString(),
-                    reserved_batches
-                };
-                set({ reservations: [...state.reservations, newRes], batches: updatedBatches });
-                get().addLog("RESERVE", "Reservation", id, `New reservation request from ${res.customer_name}`);
             },
 
-            updateReservationStatus: (id, status, prepayment) => {
-                const state = get();
-                const reservation = state.reservations.find(r => r.id === id);
-                if (!reservation) return;
+            updateReservationStatus: async (id, status, prepayment) => {
+                try {
+                    await api.patch(`/reservations/${id}`, { status, prepayment });
 
-                const previousStatus = reservation.status;
-                const newStatus = status;
+                    // Refresh full state
+                    await get().fetchERPState();
 
-                // Only process stock changes if we are coming from an active reservation state
-                const wasActive = ['pending', 'confirmed_prepaid', 'confirmed_no_prepayment', 'reserved'].includes(previousStatus);
-
-
-                let updatedBatches = [...state.batches];
-                let transactions = [...state.transactions];
-                let journalEntries = [...state.journalEntries];
-
-                if (wasActive) {
-                    if (newStatus === 'cancelled' || newStatus === 'expired') {
-                        // Release reserved stock!
-                        const reservedBatches = reservation.reserved_batches || [];
-                        for (const rb of reservedBatches) {
-                            const bIdx = updatedBatches.findIndex(b => b.id === rb.batch_id);
-                            if (bIdx !== -1) {
-                                updatedBatches[bIdx] = {
-                                    ...updatedBatches[bIdx],
-                                    quantity_reserved: Math.max(0, (updatedBatches[bIdx].quantity_reserved || 0) - rb.quantity)
-                                };
-                            }
-                        }
-                    } else if (newStatus === 'confirmed_paid_fully' || newStatus === 'completed') {
-                        // Convert to sale
-                        const reservedBatches = reservation.reserved_batches || [];
-                        const variantId = reservation.product_variant_id;
-                        const orderId = crypto.randomUUID();
-                        let totalCOGS = 0;
-                        let totalRevenue = prepayment || 0;
-
-                        const newTransactions: InventoryTransaction[] = [];
-                        const varObj = state.variants.find(v => v.id === variantId);
-                        const prodObj = state.products.find(p => p.id === varObj?.product_id);
-                        const finalPrice = prodObj?.selling_price || 0;
-                        totalRevenue = finalPrice * (reservedBatches[0]?.quantity || 1);
-
-                        const orderItemId = crypto.randomUUID();
-                        const newOrderItems: OrderItem[] = [];
-                        const newOrderItemBatchesArr: OrderItemBatch[] = [];
-
-                        for (const rb of reservedBatches) {
-                            const bIdx = updatedBatches.findIndex(b => b.id === rb.batch_id);
-                            if (bIdx !== -1) {
-                                const batch = updatedBatches[bIdx];
-                                updatedBatches[bIdx] = {
-                                    ...batch,
-                                    quantity_remaining: Math.max(0, batch.quantity_remaining - rb.quantity),
-                                    quantity_reserved: Math.max(0, (batch.quantity_reserved || 0) - rb.quantity)
-                                };
-                                totalCOGS += (rb.quantity * batch.unit_cost);
-                                newTransactions.push({
-                                    id: crypto.randomUUID(),
-                                    product_variant_id: variantId,
-                                    batch_id: batch.id,
-                                    location_id: batch.location_id,
-                                    type: 'OUT',
-                                    quantity: rb.quantity,
-                                    reference_type: 'SALE',
-                                    reference_id: orderId,
-                                    created_at: new Date().toISOString()
-                                });
-                                newOrderItemBatchesArr.push({
-                                    id: crypto.randomUUID(),
-                                    order_item_id: orderItemId,
-                                    batch_id: batch.id,
-                                    quantity: rb.quantity,
-                                    cost_at_time: batch.unit_cost
-                                });
-                            }
-                        }
-
-                        newOrderItems.push({
-                            id: orderItemId,
-                            order_id: orderId,
-                            product_variant_id: variantId,
-                            quantity: reservedBatches[0]?.quantity || 1,
-                            price_at_time: finalPrice,
-                            cost_at_time: totalCOGS / (reservedBatches[0]?.quantity || 1)
-                        });
-
-                        const newOrder: Order = {
-                            id: orderId,
-                            customer_id: reservation.customer_name, // fallback use name as ID for guests
-                            status: 'completed',
-                            total_amount: totalRevenue,
-                            created_at: new Date().toISOString()
-                        };
-                        const newInvoice: Invoice = {
-                            id: crypto.randomUUID(),
-                            customer_id: reservation.customer_name,
-                            order_id: orderId,
-                            total_amount: totalRevenue,
-                            paid_amount: totalRevenue,
-                            status: 'paid'
-                        };
-
-                        const existingPrepayment = reservation.prepayment_amount || 0;
-                        const remainingToPay = Math.max(0, totalRevenue - existingPrepayment);
-
-                        const journalItems = [
-                            { account_name: 'Sales Revenue', debit: 0, credit: totalRevenue },
-                            { account_name: 'COGS', debit: totalCOGS, credit: 0 },
-                            { account_name: 'Inventory', debit: 0, credit: totalCOGS }
-                        ];
-
-                        if (existingPrepayment > 0) {
-                            journalItems.push({ account_name: 'Customer Deposits (Unearned Revenue)', debit: Math.min(existingPrepayment, totalRevenue), credit: 0 });
-                        }
-                        if (remainingToPay > 0) {
-                            journalItems.push({ account_name: 'Cash', debit: remainingToPay, credit: 0 });
-                        }
-
-                        const journalEntry: JournalEntry = {
-                            id: crypto.randomUUID(),
-                            date: new Date().toISOString(),
-                            description: `Sale from Reservation ${id} (Prepayment Applied: $${existingPrepayment})`,
-                            reference_type: 'SALE',
-                            reference_id: orderId,
-                            items: journalItems
-                        };
-
-                        set({
-                            reservations: state.reservations.map(r =>
-                                r.id === id ? { ...r, status: newStatus } : r
-                            ),
-                            batches: updatedBatches,
-                            orders: [...state.orders, newOrder],
-                            orderItems: [...state.orderItems, ...newOrderItems],
-                            orderItemBatches: [...state.orderItemBatches, ...newOrderItemBatchesArr],
-                            transactions: [...state.transactions, ...newTransactions],
-                            invoices: [...state.invoices, newInvoice],
-                            journalEntries: [...state.journalEntries, journalEntry]
-                        });
-                        get().addLog("UPDATE", "Reservation", id, `Status updated to ${newStatus} (Sale recorded, prepayment applied)`);
-                        return;
-                    }
+                    get().addLog("STATUS", "Reservation", id, `Updated reservation status to ${status}`);
+                } catch (e: any) {
+                    console.error("Failed to update reservation status:", e);
                 }
+            },
 
-                if (prepayment && prepayment > 0) {
-                    get().recordPrepayment(id, prepayment, "Initial Deposit");
-                    return; // recordPrepayment handles the set call
+            recordPrepayment: async (id, amount, method) => {
+                try {
+                    await api.post('/prepayments', { id, amount, method });
+
+                    // Refresh full state
+                    await get().fetchERPState();
+
+                    get().addLog("PAYMENT", "Reservation", id, `Recorded $${amount} prepayment via ${method}`);
+                } catch (e: any) {
+                    console.error("Failed to record prepayment:", e);
                 }
-
-                set({
-                    reservations: state.reservations.map(r =>
-                        r.id === id ? { ...r, status: newStatus } : r
-                    ),
-                    batches: updatedBatches
-                });
-                get().addLog("UPDATE", "Reservation", id, `Status updated to ${newStatus}`);
             },
 
-            recordPrepayment: (id, amount, method) => {
-                const state = get();
-                const res = state.reservations.find(r => r.id === id);
-                if (!res) return;
-
-                const timestamp = new Date().toISOString();
-                const journalEntry: JournalEntry = {
-                    id: crypto.randomUUID(),
-                    date: timestamp,
-                    description: `Prepayment for Reservation ${id} from ${res.customer_name}`,
-                    reference_type: 'PREPAYMENT',
-                    reference_id: id,
-                    items: [
-                        { account_name: 'Cash', debit: amount, credit: 0 },
-                        { account_name: 'Customer Deposits (Unearned Revenue)', debit: 0, credit: amount }
-                    ]
-                };
-
-                set({
-                    reservations: state.reservations.map(r =>
-                        r.id === id ? { ...r, prepayment_amount: (r.prepayment_amount || 0) + amount, status: 'confirmed_prepaid' } : r
-                    ),
-                    journalEntries: [...state.journalEntries, journalEntry]
-                });
-                get().addLog("PAYMENT", "Reservation", id, `Recorded $${amount} prepayment via ${method}`);
-            },
-
-            addTask: (task) => {
-                const id = crypto.randomUUID();
-                const newTask: EmployeeTask = {
-                    ...task,
-                    id,
-                    created_at: new Date().toISOString()
-                };
-                set((state) => ({ tasks: [...state.tasks, newTask] }));
-                get().addLog("TASK", "Employee", task.employee_id, `New task assigned: ${task.title}`);
-            },
-
-            updateTaskStatus: (id, status) => {
-                set((state) => ({
-                    tasks: state.tasks.map(t => t.id === id ? { ...t, status } : t)
-                }));
-            },
-
-            adjustStock: ({ batchId, type, quantity, reason }) => {
-                const state = get();
-                const batch = state.batches.find(b => b.id === batchId);
-                if (!batch) throw new Error("Batch not found");
-
-                // For removals (damage/loss), quantity should be negative or we negate it
-                const delta = (type === 'damage' || type === 'loss') ? -Math.abs(quantity) : Math.abs(quantity);
-                const newQty = Math.max(0, batch.quantity_remaining + delta);
-                const actualDelta = newQty - batch.quantity_remaining; // real change (may be clamped)
-
-                // Update batch quantity_remaining
-                set(state => ({
-                    batches: state.batches.map(b => b.id === batchId ? { ...b, quantity_remaining: newQty } : b)
-                }));
-
-                // Record inventory transaction
-                const txn: InventoryTransaction = {
-                    id: crypto.randomUUID(),
-                    product_variant_id: batch.product_variant_id,
-                    batch_id: batchId,
-                    location_id: batch.location_id,
-                    type: delta > 0 ? 'IN' : 'OUT',
-                    quantity: Math.abs(actualDelta),
-                    reference_type: type.toUpperCase() as any,
-                    reference_id: batchId,
-                    created_at: new Date().toISOString(),
-                };
-                set(state => ({ transactions: [...state.transactions, txn] }));
-
-                // Journal entry for write-offs (damage / loss reduce asset value)
-                if ((type === 'damage' || type === 'loss') && actualDelta !== 0) {
-                    const lossValue = Math.abs(actualDelta) * batch.unit_cost;
-                    const journalEntry: JournalEntry = {
-                        id: crypto.randomUUID(),
-                        date: new Date().toISOString(),
-                        description: `Stock ${type} adjustment — ${reason}`,
-                        reference_type: 'ADJUSTMENT',
-                        reference_id: batchId,
-                        items: [
-                            { account_name: `${type.charAt(0).toUpperCase() + type.slice(1)} Expense`, debit: lossValue, credit: 0 },
-                            { account_name: 'Inventory', debit: 0, credit: lossValue },
-                        ]
-                    };
-                    set(state => ({ journalEntries: [...state.journalEntries, journalEntry] }));
+            addTask: async (task) => {
+                try {
+                    await api.post('/tasks', task);
+                    await get().fetchERPState();
+                    get().addLog("TASK", "Employee", task.employee_id, `New task assigned: ${task.title}`);
+                } catch (e: any) {
+                    console.error("Failed to add task:", e);
                 }
-
-                get().addLog("ADJUST", "Batch", batchId, `${type.toUpperCase()} adjustment of ${Math.abs(quantity)} units. Reason: ${reason}`);
             },
 
-            getInventoryValue: () => get().batches.reduce((sum, b) => sum + (b.quantity_remaining * b.unit_cost), 0),
-            getTotalRevenue: () => get().orders.reduce((sum, o) => sum + o.total_amount, 0),
-            getCashReceived: () => get().payments.reduce((sum, p) => sum + p.amount, 0),
-            getTotalCOGS: () => get().orderItems.reduce((sum, item) => sum + (item.cost_at_time * (item.quantity)), 0),
+            updateTaskStatus: async (id, status) => {
+                try {
+                    await api.patch(`/tasks/${id}`, { status });
+                    await get().fetchERPState();
+                } catch (e: any) {
+                    console.error("Failed to update task status:", e);
+                }
+            },
+
+            adjustStock: async ({ batchId, type, quantity, reason }) => {
+                try {
+                    await api.post('/adjust-stock', { batchId, type, quantity, reason });
+                    await get().fetchERPState();
+                    get().addLog("ADJUST", "Batch", batchId, `${type.toUpperCase()} adjustment of ${Math.abs(quantity)} units. Reason: ${reason}`);
+                } catch (e: any) {
+                    console.error("Stock adjustment failed:", e);
+                }
+            },
+
+            getInventoryValue: () => get().batches.reduce((sum, b) => sum + (Number(b.quantity_remaining) * Number(b.unit_cost)), 0),
+            getTotalRevenue: () => get().orders.reduce((sum, o) => sum + Number(o.total_amount), 0),
+            getCashReceived: () => get().payments.reduce((sum, p) => sum + Number(p.amount), 0),
+            getTotalCOGS: () => get().orderItems.reduce((sum, item) => sum + (Number(item.cost_at_time) * (item.quantity)), 0),
             getNetProfit: () => get().getTotalRevenue() - get().getTotalCOGS()
         }),
         { name: "rina-atelier-erp-v2" }

@@ -15,30 +15,44 @@ import Auth from "./pages/Auth";
 import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 
+import { useEffect } from "react";
+import { useERPStore } from "./hooks/use-erp-store";
+import { useAuthStore } from "./hooks/use-auth-store";
+
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/shop" element={<Shop />} />
-          <Route path="/favorites" element={<Favorites />} />
-          <Route path="/reservations" element={<Reservations />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/employee" element={<Employee />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/account" element={<Account />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const fetchERPState = useERPStore(state => state.fetchERPState);
+  const fetchUsers = useAuthStore(state => state.fetchUsers);
+
+  useEffect(() => {
+    fetchERPState();
+    fetchUsers();
+  }, [fetchERPState, fetchUsers]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/shop" element={<Shop />} />
+            <Route path="/favorites" element={<Favorites />} />
+            <Route path="/reservations" element={<Reservations />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/employee" element={<Employee />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/account" element={<Account />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

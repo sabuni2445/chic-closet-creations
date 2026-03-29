@@ -38,7 +38,7 @@ const ProductDetailModal = ({ product, isOpen, onClose }: ProductDetailModalProp
         toast.success(favorited ? "Removed from favorites" : "Added to favorites");
     };
 
-    const handleReserve = () => {
+    const handleReserve = async () => {
         // Must be logged in
         if (!currentUser) {
             toast.error("Please sign in to reserve a fitting.", {
@@ -62,7 +62,7 @@ const ProductDetailModal = ({ product, isOpen, onClose }: ProductDetailModalProp
                 notes: `Requested: ${product.name}`
             });
 
-            erp.requestReservation({
+            await erp.requestReservation({
                 customer_name: currentUser.name,
                 customer_phone: currentUser.phone,
                 product_variant_id: variantId,

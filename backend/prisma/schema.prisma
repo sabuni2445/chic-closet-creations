@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(uuid())
+  name       String
+  email      String   @unique
+  phone      String
+  username   String?  @unique
+  password   String
+  role       String   @default("customer")
+  address    String?
+  created_at DateTime @default(now())
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String
+  products Product[]
+}
+
+model Brand {
+  id       String    @id @default(uuid())
+  name     String
+  products Product[]
+}
+
+enum LocationType {
+  warehouse
+  store
+}
+
+model Location {
+  id            String         @id @default(uuid())
+  name          String
+  type          LocationType
+  address       String
+  contact_phone String?
+  parent_id     String?
+  batches       InventoryBatch[]
+  transactions  InventoryTransaction[]
+}
+
+model Product {
+  id            String    @id @default(uuid())
+  name          String
+  description   String    @db.Text
+  category_id   String
+  category      Category  @relation(fields: [category_id], references: [id])
+  brand_id      String
+  brand         Brand     @relation(fields: [brand_id], references: [id])
+  selling_price Decimal   @db.Decimal(10, 2)
+  images        Json      // Array of strings
+  sizes         Json      // Array of strings
+  colors        Json      // Array of strings
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now())
+  variants      Variant[]
+}
+
+model Variant {
+  id           String   @id @default(uuid())
+  product_id   String
+  product      Product  @relation(fields: [product_id], references: [id])
+  sku          String   @unique
+  size         String
+  color        String
+  created_at   DateTime @default(now())
+  batches      InventoryBatch[]
+  transactions InventoryTransaction[]
+  order_items  OrderItem[]
+  reservations Reservation[]
+}
+
+model InventoryBatch {
+  id                 String               @id @default(uuid())
+  product_variant_id String
+  variant            Variant              @relation(fields: [product_variant_id], references: [id])
+  location_id        String
+  location           Location             @relation(fields: [location_id], references: [id])
+  quantity_remaining Int
+  quantity_reserved  Int                  @default(0)
+  unit_cost          Decimal              @db.Decimal(10, 2)
+  purchase_date      DateTime
+  status             String?              @default("active")
+  transactions       InventoryTransaction[]
+  order_item_batches OrderItemBatch[]
+}
+
+enum TransactionType {
+  IN
+  OUT
+  RETURN
+  ADJUSTMENT
+  TRANSFER
+}
+
+model InventoryTransaction {
+  id                 String          @id @default(uuid())
+  product_variant_id String
+  variant            Variant         @relation(fields: [product_variant_id], references: [id])
+  batch_id           String
+  batch              InventoryBatch  @relation(fields: [batch_id], references: [id])
+  location_id        String
+  location           Location        @relation(fields: [location_id], references: [id])
+  type               TransactionType
+  quantity           Int
+  reference_type     String
+  reference_id       String
+  created_at         DateTime        @default(now())
+}
+
+enum OrderStatus {
+  pending
+  completed
+  cancelled
+  returned
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  customer_id  String
+  status       OrderStatus @default(pending)
+  total_amount Decimal     @db.Decimal(10, 2)
+  created_at   DateTime    @default(now())
+  items        OrderItem[]
+  invoices     Invoice[]
+  returns      Return[]
+}
+
+model OrderItem {
+  id                 String           @id @default(uuid())
+  order_id           String
+  order              Order            @relation(fields: [order_id], references: [id])
+  product_variant_id String
+  variant            Variant          @relation(fields: [product_variant_id], references: [id])
+  quantity           Int
+  price_at_time      Decimal          @db.Decimal(10, 2)
+  cost_at_time       Decimal          @db.Decimal(10, 2)
+  batches            OrderItemBatch[]
+}
+
+model OrderItemBatch {
+  id            String         @id @default(uuid())
+  order_item_id String
+  order_item    OrderItem      @relation(fields: [order_item_id], references: [id])
+  batch_id      String
+  batch         InventoryBatch @relation(fields: [batch_id], references: [id])
+  quantity      Int
+  cost_at_time  Decimal        @db.Decimal(10, 2)
+}
+
+enum PaymentStatus {
+  unpaid
+  partial
+  paid
+}
+
+model Invoice {
+  id           String        @id @default(uuid())
+  customer_id  String
+  order_id     String
+  order        Order         @relation(fields: [order_id], references: [id])
+  total_amount Decimal       @db.Decimal(10, 2)
+  paid_amount  Decimal       @db.Decimal(10, 2)
+  status       PaymentStatus @default(unpaid)
+  payments     Payment[]
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  invoice_id     String
+  invoice        Invoice  @relation(fields: [invoice_id], references: [id])
+  amount         Decimal  @db.Decimal(10, 2)
+  payment_method String
+  payment_date   DateTime @default(now())
+}
+
+model Return {
+  id         String       @id @default(uuid())
+  order_id   String
+  order      Order        @relation(fields: [order_id], references: [id])
+  reason     String
+  status     String
+  created_at DateTime     @default(now())
+  items      ReturnItem[]
+  refunds    Refund[]
+}
+
+model ReturnItem {
+  id            String @id @default(uuid())
+  return_id     String
+  return        Return @relation(fields: [return_id], references: [id])
+  order_item_id String
+  quantity      Int
+}
+
+model Refund {
+  id            String   @id @default(uuid())
+  return_id     String
+  return        Return   @relation(fields: [return_id], references: [id])
+  amount        Decimal  @db.Decimal(10, 2)
+  refund_method String
+  created_at    DateTime @default(now())
+}
+
+enum Department {
+  sales
+  warehouse
+  management
+}
+
+enum EmployeeStatus {
+  active
+  inactive
+}
+
+model Employee {
+  id                     String         @id @default(uuid())
+  name                   String
+  role                   String
+  department             Department
+  email                  String         @unique
+  phone                  String
+  salary                 Decimal        @db.Decimal(10, 2)
+  status                 EmployeeStatus @default(active)
+  joined_date            DateTime       @default(now())
+  address                String?
+  national_id            String?
+  emergency_contact_name String?
+  emergency_contact_phone String?
+  guarantor_name         String?
+  guarantor_phone        String?
+  username               String?        @unique
+  password               String?
+  tasks                  EmployeeTask[]
+  assigned_reservations  Reservation[]
+}
+
+model JournalEntry {
+  id             String             @id @default(uuid())
+  date           DateTime           @default(now())
+  description    String
+  reference_type String
+  reference_id   String
+  items          JournalEntryItem[]
+}
+
+model JournalEntryItem {
+  id              String       @id @default(uuid())
+  journal_entry_id String
+  journal_entry   JournalEntry @relation(fields: [journal_entry_id], references: [id])
+  account_name    String
+  debit           Decimal      @db.Decimal(10, 2)
+  credit          Decimal      @db.Decimal(10, 2)
+}
+
+enum ReservationStatus {
+  pending
+  confirmed_prepaid
+  confirmed_paid_fully
+  confirmed_no_prepayment
+  completed
+  cancelled
+  expired
+  reserved
+}
+
+model Reservation {
+  id                 String            @id @default(uuid())
+  customer_name      String
+  customer_phone     String
+  product_variant_id String
+  variant            Variant           @relation(fields: [product_variant_id], references: [id])
+  status             ReservationStatus @default(pending)
+  created_at         DateTime          @default(now())
+  assigned_employee_id String?
+  employee           Employee?         @relation(fields: [assigned_employee_id], references: [id])
+  prepayment_amount  Decimal?          @db.Decimal(10, 2)
+  notes              String?           @db.Text
+  reserved_batches   Json?             
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+model EmployeeTask {
+  id          String       @id @default(uuid())
+  employee_id String
+  employee    Employee     @relation(fields: [employee_id], references: [id])
+  title       String
+  description String       @db.Text
+  status      TaskStatus   @default(todo)
+  priority    TaskPriority @default(medium)
+  due_date    DateTime?
+  created_at  DateTime     @default(now())
+}

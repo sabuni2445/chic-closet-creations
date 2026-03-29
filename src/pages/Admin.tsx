@@ -31,7 +31,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { products as initialProducts } from "@/data/products";
 import logo from "@/assets/logo.png";
 
 const Admin = () => {
@@ -43,97 +42,9 @@ const Admin = () => {
     const [selectedInventoryProduct, setSelectedInventoryProduct] = useState<string>("");
     const [editingProduct, setEditingProduct] = useState<any>(null);
 
-    // Mock initial setup if empty
-    useMemo(() => {
-        if (erp.products.length === 0) {
-            initialProducts.forEach(p => {
-                const productId = p.id;
-                erp.addProduct({
-                    id: productId,
-                    name: p.name,
-                    description: p.description,
-                    category_id: p.category,
-                    brand_id: "Rinas Closet",
-                    selling_price: p.price,
-                    images: [p.image],
-                    sizes: ["S", "M", "L", "XL"],
-                    colors: ["Original"],
-                    is_active: true,
-                    created_at: new Date().toISOString()
-                });
-
-                // Add variants for initial products
-                ["S", "M", "L", "XL"].forEach(size => {
-                    erp.addVariant({
-                        id: crypto.randomUUID(),
-                        product_id: productId,
-                        sku: `${p.name.slice(0, 3).toUpperCase()}-${size}`,
-                        size: size,
-                        color: "Original",
-                        created_at: new Date().toISOString()
-                    });
-                });
-            });
-        }
-        // ... rest of employee setup remains ...
-        if (erp.employees.length === 0) {
-            erp.addEmployee({
-                id: "1",
-                name: "Sebrina K.",
-                role: "Founder & Creative Director",
-                department: "management",
-                email: "sebrina@rinascloset.com",
-                phone: "+251 911 223 344",
-                salary: 5000,
-                status: "active",
-                joined_date: "2024-01-10",
-                username: "sebrina.k",
-                password: "password123"
-            });
-            erp.addEmployee({
-                id: "2",
-                name: "Hanna T.",
-                role: "Store Manager",
-                department: "sales",
-                email: "hanna@rinascloset.com",
-                phone: "+251 922 334 455",
-                salary: 2500,
-                status: "active",
-                joined_date: "2024-02-15",
-                username: "hanna.t",
-                password: "password123"
-            });
-        }
-    }, [erp.employees.length]);
-
-    // Automatic Migration: Ensure all legacy employees have credentials & exist in Auth Store
     useEffect(() => {
-        erp.employees.forEach(emp => {
-            const username = emp.username || emp.name.toLowerCase().split(' ').join('.');
-            const password = emp.password || "password123";
-
-            // If missing credentials in ERP, update them
-            if (!emp.username || !emp.password) {
-                erp.updateEmployee(emp.id, {
-                    username,
-                    password
-                });
-            }
-
-            // Always sync to Auth Store "users table"
-            auth.addUser({
-                id: emp.id,
-                name: emp.name,
-                email: emp.email,
-                phone: emp.phone,
-                username: username,
-                password: password,
-                role: emp.role,
-                created_at: emp.joined_date
-            });
-        });
-    }, [erp.employees]);
-
+        erp.fetchERPState();
+    }, []);
 
     const accrualRevenue = erp.getTotalRevenue();
     const cashRevenue = erp.getCashReceived();
@@ -141,7 +52,7 @@ const Admin = () => {
     const inventoryValue = erp.getInventoryValue();
     const netProfit = accrualRevenue - totalCOGS;
 
-    const handleAddStock = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleInventorySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         if (erp.isPeriodLocked) {
             toast.error("Fiscal Period is Locked. Adjustments restricted.");
             return;
@@ -154,10 +65,10 @@ const Admin = () => {
         // Update product selling price
         const variant = erp.variants.find(v => v.id === variantId);
         if (variant) {
-            erp.updateProduct(variant.product_id, { selling_price: sellingPrice });
+            await erp.updateProduct(variant.product_id, { selling_price: sellingPrice });
         }
 
-        erp.addBatch({
+        await erp.addBatch({
             product_variant_id: variantId,
             location_id: (formData.get("locationId") as string) || "main",
             quantity_remaining: Number(formData.get("quantity")),
@@ -171,7 +82,7 @@ const Admin = () => {
 
     const [selectedQuickSaleVariant, setSelectedQuickSaleVariant] = useState<string>("");
 
-    const handleQuickCheckout = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleQuickSaleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         if (erp.isPeriodLocked) {
             toast.error("Fiscal Period is Locked. Sales suspended.");
             return;
@@ -190,8 +101,8 @@ const Admin = () => {
             return;
         }
 
-        const successId = erp.processSale(customerName, [
-            { variantId, quantity: qty, price: product.selling_price }
+        const successId = await erp.processSale(customerName, [
+            { variantId, quantity: qty, price: Number(product.selling_price) }
         ]);
 
         if (successId) {
@@ -203,7 +114,7 @@ const Admin = () => {
         }
     };
 
-    const handleMockSale = () => {
+    const handleMockSale = async () => {
         // Keep as a fallback or remove, but let's keep it for compatibility if referenced elsewhere
         if (erp.isPeriodLocked) return;
         const variantsWithStock = erp.variants.filter(v =>
@@ -212,13 +123,13 @@ const Admin = () => {
         if (variantsWithStock.length === 0) return;
         const rv = variantsWithStock[Math.floor(Math.random() * variantsWithStock.length)];
         const p = erp.products.find(prod => prod.id === rv.product_id);
-        if (p) erp.processSale("Walk-in", [{ variantId: rv.id, quantity: 1, price: p.selling_price }]);
+        if (p) await erp.processSale("Walk-in", [{ variantId: rv.id, quantity: 1, price: Number(p.selling_price) }]);
     };
 
-    const handleAssignTask = (e: React.FormEvent<HTMLFormElement>, employeeId: string) => {
+    const handleAssignTask = async (e: React.FormEvent<HTMLFormElement>, employeeId: string) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
-        erp.addTask({
+        await erp.addTask({
             employee_id: employeeId,
             title: fd.get("title") as string,
             description: fd.get("description") as string,
@@ -245,7 +156,26 @@ const Admin = () => {
                 files.map((file) => {
                     return new Promise<string>((resolve) => {
                         const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.onloadend = () => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                let width = img.width;
+                                let height = img.height;
+                                // Resize if larger than 1200px
+                                const maxDim = 1200;
+                                if (width > maxDim || height > maxDim) {
+                                    if (width > height) { height *= maxDim / width; width = maxDim; }
+                                    else { width *= maxDim / height; height = maxDim; }
+                                }
+                                canvas.width = width;
+                                canvas.height = height;
+                                const ctx = canvas.getContext('2d');
+                                ctx?.drawImage(img, 0, 0, width, height);
+                                resolve(canvas.toDataURL('image/jpeg', 0.6)); // Compress to JPEG
+                            };
+                            img.src = reader.result as string;
+                        };
                         reader.readAsDataURL(file);
                     });
                 })
@@ -260,38 +190,42 @@ const Admin = () => {
         const productId = crypto.randomUUID();
         const productName = (formData.get("name") as string) || "New Item";
 
-        erp.addProduct({
-            id: productId,
-            name: productName,
-            description: (formData.get("description") as string) || "",
-            category_id: (formData.get("category") as string) || "General",
-            brand_id: (formData.get("brand") as string) || "Rinas Closet",
-            selling_price: 0,
-            images: images.length > 0 ? images : ["/placeholder.svg"],
-            sizes: sizes,
-            colors: colors,
-            is_active: true,
-            created_at: new Date().toISOString()
-        });
-
-        // Generate Variants
-        sizes.forEach(size => {
-            colors.forEach(color => {
-                erp.addVariant({
-                    id: crypto.randomUUID(),
-                    product_id: productId,
-                    sku: `${productName.slice(0, 3).toUpperCase()}-${size}-${color.slice(0, 3).toUpperCase()}`,
-                    size,
-                    color,
-                    created_at: new Date().toISOString()
-                });
+        try {
+            await erp.addProduct({
+                id: productId,
+                name: productName,
+                description: (formData.get("description") as string) || "",
+                category_id: (formData.get("category") as string) || erp.categories[0]?.id || "General",
+                brand_id: (formData.get("brand") as string) || erp.brands[0]?.id || "RINA",
+                selling_price: Number(formData.get("selling_price") || 0),
+                images: images.length > 0 ? images : ["/placeholder.svg"],
+                sizes: sizes,
+                colors: colors,
+                is_active: true,
+                created_at: new Date().toISOString()
             });
-        });
 
-        toast.success("Product and variants created successfully");
-        setSelectedSizes([]);
-        setSelectedColors([]);
-        (e.target as HTMLFormElement).reset();
+            // Generate Variants
+            for (const size of sizes) {
+                for (const color of colors) {
+                    await erp.addVariant({
+                        id: crypto.randomUUID(),
+                        product_id: productId,
+                        sku: `${productName.slice(0, 3).toUpperCase()}-${size}-${color.slice(0, 3).toUpperCase()}`,
+                        size,
+                        color,
+                        created_at: new Date().toISOString()
+                    });
+                }
+            }
+
+            toast.success("Product and variants created successfully");
+            setSelectedSizes([]);
+            setSelectedColors([]);
+            (e.target as HTMLFormElement).reset();
+        } catch (err: any) {
+            toast.error("Failed to save product: " + (err.message || "Unknown error"));
+        }
     };
 
 
@@ -307,30 +241,53 @@ const Admin = () => {
                 files.map((file) => {
                     return new Promise<string>((resolve) => {
                         const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.onloadend = () => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                let width = img.width;
+                                let height = img.height;
+                                const maxDim = 1200;
+                                if (width > maxDim || height > maxDim) {
+                                    if (width > height) { height *= maxDim / width; width = maxDim; }
+                                    else { width *= maxDim / height; height = maxDim; }
+                                }
+                                canvas.width = width;
+                                canvas.height = height;
+                                const ctx = canvas.getContext('2d');
+                                ctx?.drawImage(img, 0, 0, width, height);
+                                resolve(canvas.toDataURL('image/jpeg', 0.6));
+                            };
+                            img.src = reader.result as string;
+                        };
                         reader.readAsDataURL(file);
                     });
                 })
             );
         }
 
-        erp.updateProduct(productId, {
-            name: (formData.get("name") as string) || editingProduct.name,
-            description: (formData.get("description") as string) || editingProduct.description,
-            category_id: (formData.get("category") as string) || editingProduct.category_id,
-            brand_id: (formData.get("brand") as string) || editingProduct.brand_id,
-            images,
-            sizes: selectedSizes.length > 0 ? selectedSizes : editingProduct.sizes,
-            colors: selectedColors.length > 0 ? selectedColors : editingProduct.colors,
-        });
+        try {
+            await erp.updateProduct(productId, {
+                name: (formData.get("name") as string) || editingProduct.name,
+                description: (formData.get("description") as string) || editingProduct.description,
+                category_id: (formData.get("category") as string) || editingProduct.category_id,
+                brand_id: (formData.get("brand") as string) || editingProduct.brand_id,
+                selling_price: Number(formData.get("selling_price") || editingProduct.selling_price),
+                images,
+                sizes: selectedSizes.length > 0 ? selectedSizes : editingProduct.sizes,
+                colors: selectedColors.length > 0 ? selectedColors : editingProduct.colors,
+            });
 
-        toast.success("Product details updated successfully");
-        setEditingProduct(null);
-        setSelectedSizes([]);
-        setSelectedColors([]);
+            toast.success("Product details updated successfully");
+            setEditingProduct(null);
+            setSelectedSizes([]);
+            setSelectedColors([]);
+        } catch (err: any) {
+            toast.error("Update failed: " + (err.message || "Unknown error"));
+        }
     };
 
-    const handleHireEmployee = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleHireEmployee = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
 
@@ -363,22 +320,8 @@ const Admin = () => {
             password,
         };
 
-        erp.addEmployee(employeeData);
-
-        // Also save to the main "users table" in Auth Store
-        auth.addUser({
-            id,
-            name,
-            email,
-            phone,
-            username,
-            password,
-            role,
-            address: employeeData.address,
-            created_at: joined_date
-        });
-
-        toast.success("New employee registered with login credentials");
+        await erp.addEmployee(employeeData);
+        toast.success("Employee added successfully");
         (e.target as HTMLFormElement).reset();
     };
 
@@ -638,7 +581,7 @@ const Admin = () => {
                                                     </select>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-6">
+                                            <div className="grid grid-cols-3 gap-6">
                                                 <div className="space-y-2">
                                                     <Label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest px-1">Brand</Label>
                                                     <select name="brand" className="w-full h-12 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all">
@@ -646,8 +589,12 @@ const Admin = () => {
                                                     </select>
                                                 </div>
                                                 <div className="space-y-2">
+                                                    <Label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest px-1">Retail Price (ETB)</Label>
+                                                    <Input name="selling_price" type="number" step="0.01" required placeholder="0.00" className="h-12 rounded-xl border-gray-100 bg-gray-50 px-4 focus:ring-2 focus:ring-primary/20 transition-all font-medium" />
+                                                </div>
+                                                <div className="space-y-2">
                                                     <Label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest px-1">Description</Label>
-                                                    <Textarea name="description" required placeholder="Describe the materials, style, and fit..." className="rounded-xl border-gray-100 bg-gray-50 px-4 py-3 focus:ring-2 focus:ring-primary/20 transition-all min-h-[50px]" />
+                                                    <Textarea name="description" required placeholder="Describe style & fit..." className="rounded-xl border-gray-100 bg-gray-50 px-4 py-3 focus:ring-2 focus:ring-primary/20 transition-all min-h-[50px]" />
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-1 gap-6">
@@ -754,9 +701,21 @@ const Admin = () => {
                                                 <Input name="name" defaultValue={editingProduct?.name} required className="h-12 rounded-xl" />
                                             </div>
                                             <div className="space-y-2">
+                                                <Label className="text-[10px] uppercase font-bold text-gray-400">Retail Price (ETB)</Label>
+                                                <Input name="selling_price" type="number" step="0.01" defaultValue={editingProduct?.selling_price} required className="h-12 rounded-xl" />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-2">
                                                 <Label className="text-[10px] uppercase font-bold text-gray-400">Category</Label>
                                                 <select name="category" defaultValue={editingProduct?.category_id} className="w-full h-12 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm">
                                                     {erp.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-[10px] uppercase font-bold text-gray-400">Brand</Label>
+                                                <select name="brand" defaultValue={editingProduct?.brand_id} className="w-full h-12 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm">
+                                                    {erp.brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                                                 </select>
                                             </div>
                                         </div>
@@ -824,9 +783,9 @@ const Admin = () => {
                                                             variant="ghost"
                                                             size="sm"
                                                             className="h-8 w-8 p-0 text-gray-300 hover:text-rose-500 hover:bg-rose-50"
-                                                            onClick={() => {
+                                                            onClick={async () => {
                                                                 if (confirm(`Are you sure you want to delete ${product.name}?`)) {
-                                                                    erp.deleteProduct(product.id);
+                                                                    await erp.deleteProduct(product.id);
                                                                     toast.success("Product removed from catalog");
                                                                 }
                                                             }}
@@ -886,10 +845,10 @@ const Admin = () => {
                                                 <DialogDescription className="text-white/40 text-xs">Define a new physical spot for stock management.</DialogDescription>
                                             </DialogHeader>
                                         </div>
-                                        <form onSubmit={(e) => {
+                                        <form onSubmit={async (e) => {
                                             e.preventDefault();
                                             const fd = new FormData(e.currentTarget);
-                                            erp.addLocation({
+                                            await erp.addLocation({
                                                 id: crypto.randomUUID(),
                                                 name: fd.get("name") as string,
                                                 type: fd.get("type") as any,
@@ -1054,7 +1013,7 @@ const Admin = () => {
                                                 <DialogTitle className="text-xl font-bold">Stock Adjustment</DialogTitle>
                                                 <DialogDescription className="text-sm text-gray-400">Record damage, loss, correction, or return for a batch.</DialogDescription>
                                             </DialogHeader>
-                                            <form onSubmit={(e) => {
+                                            <form onSubmit={async (e) => {
                                                 e.preventDefault();
                                                 const fd = new FormData(e.currentTarget);
                                                 const batchId = fd.get("batchId") as string;
@@ -1063,7 +1022,7 @@ const Admin = () => {
                                                 const reason = fd.get("reason") as string;
                                                 if (!batchId || !qty || !reason.trim()) { toast.error("All fields are required."); return; }
                                                 try {
-                                                    erp.adjustStock({ batchId, type, quantity: qty, reason });
+                                                    await erp.adjustStock({ batchId, type, quantity: qty, reason });
                                                     toast.success(`Stock ${type} recorded — ${qty} units adjusted.`);
                                                     (e.target as HTMLFormElement).reset();
                                                 } catch (err: any) { toast.error(err.message); }
@@ -1115,7 +1074,7 @@ const Admin = () => {
                                             <DialogHeader>
                                                 <DialogTitle className="text-xl font-bold">New Inventory Inbound</DialogTitle>
                                             </DialogHeader>
-                                            <form onSubmit={handleAddStock} className="space-y-6 pt-4">
+                                            <form onSubmit={handleInventorySubmit} className="space-y-6 pt-4">
                                                 <div className="grid grid-cols-1 gap-6 pt-4">
                                                     <div className="space-y-2">
                                                         <Label className="text-[10px] uppercase font-bold text-gray-400 px-1">1. Select Product</Label>
@@ -1233,7 +1192,7 @@ const Admin = () => {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-xs text-gray-500">{new Date(b.purchase_date).toLocaleDateString()}</TableCell>
-                                                    <TableCell className="text-xs font-semibold text-gray-600 px-6">${b.unit_cost.toFixed(2)}</TableCell>
+                                                    <TableCell className="text-xs font-semibold text-gray-600 px-6">${Number(b.unit_cost).toFixed(2)}</TableCell>
                                                     <TableCell className="text-center">
                                                         <span className={`text-sm font-bold ${b.quantity_remaining > 5 ? 'text-emerald-600' : 'text-rose-500'}`}>{b.quantity_remaining}</span>
                                                     </TableCell>
@@ -1399,8 +1358,8 @@ const Admin = () => {
                                                                     size="sm"
                                                                     variant="outline"
                                                                     className="h-7 text-[10px] px-2 border-amber-200 text-amber-700 hover:bg-amber-50"
-                                                                    onClick={() => {
-                                                                        erp.processPayment(invoice!.id, invoice!.total_amount, "Cash");
+                                                                    onClick={async () => {
+                                                                        await erp.processPayment(invoice!.id, Number(invoice!.total_amount), "Cash");
                                                                         toast.success("Payment received successfully");
                                                                     }}
                                                                 >
@@ -1438,11 +1397,11 @@ const Admin = () => {
                                 <Card className="border-none shadow-sm rounded-2xl bg-white p-6">
                                     <div className="flex items-center justify-between mb-6">
                                         <h2 className="text-lg font-bold">Categories</h2>
-                                        <form className="flex gap-2" onSubmit={(e) => {
+                                        <form className="flex gap-2" onSubmit={async (e) => {
                                             e.preventDefault();
                                             const fd = new FormData(e.currentTarget);
                                             const val = fd.get("catName") as string;
-                                            if (val) { erp.addCategory({ id: val, name: val }); e.currentTarget.reset(); }
+                                            if (val) { await erp.addCategory({ id: crypto.randomUUID(), name: val }); e.currentTarget.reset(); toast.success(`Category "${val}" added`); }
                                         }}>
                                             <Input name="catName" placeholder="New Category" className="h-9 w-40 text-sm" required />
                                             <Button type="submit" size="sm" className="bg-primary text-white h-9 shadow-sm">Add</Button>
@@ -1452,7 +1411,10 @@ const Admin = () => {
                                         {erp.categories.map(c => (
                                             <div key={c.id} className="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-xl border border-gray-100">
                                                 <span className="font-bold text-gray-700 text-sm">{c.name}</span>
-                                                <Button size="sm" variant="ghost" className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0" onClick={() => erp.deleteCategory(c.id)}>
+                                                <Button size="sm" variant="ghost" className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0" onClick={async () => {
+                                                    await erp.deleteCategory(c.id);
+                                                    toast.success("Category deleted");
+                                                }}>
                                                     <XCircle size={16} />
                                                 </Button>
                                             </div>
@@ -1463,11 +1425,11 @@ const Admin = () => {
                                 <Card className="border-none shadow-sm rounded-2xl bg-white p-6">
                                     <div className="flex items-center justify-between mb-6">
                                         <h2 className="text-lg font-bold">Brands</h2>
-                                        <form className="flex gap-2" onSubmit={(e) => {
+                                        <form className="flex gap-2" onSubmit={async (e) => {
                                             e.preventDefault();
                                             const fd = new FormData(e.currentTarget);
                                             const val = fd.get("brandName") as string;
-                                            if (val) { erp.addBrand({ id: val, name: val }); e.currentTarget.reset(); }
+                                            if (val) { await erp.addBrand({ id: crypto.randomUUID(), name: val }); e.currentTarget.reset(); toast.success(`Brand "${val}" added`); }
                                         }}>
                                             <Input name="brandName" placeholder="New Brand" className="h-9 w-40 text-sm" required />
                                             <Button type="submit" size="sm" className="bg-primary text-white h-9 shadow-sm">Add</Button>
@@ -1477,7 +1439,10 @@ const Admin = () => {
                                         {erp.brands.map(b => (
                                             <div key={b.id} className="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-xl border border-gray-100">
                                                 <span className="font-bold text-gray-700 text-sm">{b.name}</span>
-                                                <Button size="sm" variant="ghost" className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0" onClick={() => erp.deleteBrand(b.id)}>
+                                                <Button size="sm" variant="ghost" className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0" onClick={async () => {
+                                                    await erp.deleteBrand(b.id);
+                                                    toast.success("Brand deleted");
+                                                }}>
                                                     <XCircle size={16} />
                                                 </Button>
                                             </div>
@@ -1532,7 +1497,7 @@ const Admin = () => {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right font-mono text-xs font-bold text-gray-700">
-                                                        {res.prepayment_amount ? `$${res.prepayment_amount.toFixed(2)}` : '—'}
+                                                        {res.prepayment_amount ? `$${Number(res.prepayment_amount).toFixed(2)}` : '—'}
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
@@ -1553,16 +1518,19 @@ const Admin = () => {
                                                                         size="sm"
                                                                         variant="outline"
                                                                         className="h-8 text-[10px] uppercase font-black tracking-widest px-3 border-blue-200 text-blue-600 hover:bg-blue-50"
-                                                                        onClick={() => {
+                                                                        onClick={async () => {
                                                                             if (confirm("Finalize this fitting into a Sale? This will record revenue and deduct stock.")) {
-                                                                                erp.updateReservationStatus(res.id, 'completed');
+                                                                                await erp.updateReservationStatus(res.id, 'completed');
                                                                                 toast.success("Reservation finalized into a Sale");
                                                                             }
                                                                         }}
                                                                     >
                                                                         Finalize Sale
                                                                     </Button>
-                                                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-rose-50 hover:text-rose-500" onClick={() => erp.updateReservationStatus(res.id, 'cancelled')} title="Cancel Reservation"><XCircle size={14} /></Button>
+                                                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-rose-50 hover:text-rose-500" onClick={async () => {
+                                                                        await erp.updateReservationStatus(res.id, 'cancelled');
+                                                                        toast.success("Reservation cancelled and stock released");
+                                                                    }} title="Cancel Reservation"><XCircle size={14} /></Button>
                                                                 </>
                                                             ) : (
                                                                 <span className="text-[10px] font-bold text-gray-300 uppercase italic">Archived</span>
@@ -1677,9 +1645,9 @@ const Admin = () => {
                                                                 size="sm"
                                                                 variant="outline"
                                                                 className="h-8 text-[10px] uppercase font-black px-3 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
-                                                                onClick={() => {
+                                                                onClick={async () => {
                                                                     if (confirm(`Promote ${u.name} to STAFF? This grants access to the Employee Portal.`)) {
-                                                                        auth.updateUserRole(u.id, 'staff');
+                                                                        await auth.updateUserRole(u.id, 'staff');
                                                                         erp.addEmployee({
                                                                             id: u.id,
                                                                             name: u.name,
@@ -1846,7 +1814,7 @@ const Admin = () => {
                                 {[
                                     { label: "Headcount", value: erp.employees.length, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
                                     { label: "Active Roles", value: "3", icon: Briefcase, color: "text-purple-600", bg: "bg-purple-50" },
-                                    { label: "Monthly Payroll", value: `$${erp.employees.reduce((sum, e) => sum + e.salary, 0).toLocaleString()}`, icon: Receipt, color: "text-primary", bg: "bg-primary/5" },
+                                    { label: "Monthly Payroll", value: `$${erp.employees.reduce((sum, e) => sum + Number(e.salary), 0).toLocaleString()}`, icon: Receipt, color: "text-primary", bg: "bg-primary/5" },
                                 ].map((stat, i) => (
                                     <Card key={i} className="border-none shadow-sm rounded-2xl bg-white">
                                         <CardHeader className="py-4 px-6 flex flex-row items-center justify-between">
@@ -2244,7 +2212,7 @@ const Admin = () => {
                                                     <DialogDescription className="text-white/40 text-[10px] font-bold uppercase tracking-widest mt-1">Direct Walk-in Customer Sale</DialogDescription>
                                                 </DialogHeader>
                                             </div>
-                                            <form onSubmit={handleQuickCheckout} className="p-10 space-y-6">
+                                            <form onSubmit={handleQuickSaleSubmit} className="p-10 space-y-6">
                                                 <div className="space-y-4">
                                                     <div className="space-y-2">
                                                         <Label className="text-[10px] uppercase font-black text-gray-400 tracking-widest px-1">1. Customer Name (Optional)</Label>
